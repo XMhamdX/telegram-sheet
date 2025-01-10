@@ -1,0 +1,19 @@
+{
+    "مرابح غفران للسياحة": {
+        "sheet_name": "مرابح غفران للسياحة",
+        "worksheet_name": "الورقة1",
+        "column_types": {
+            "التاريخ ": "date",
+            "تسمية": "text",
+            "المربح ": "number",
+            "ملاحظات": "text"
+        },
+        "date_options": {
+            "التاريخ ": {
+                "include_time": false,
+                "auto": true
+            }
+        },
+        "authorized_user_id": "773012141"
+    }
+}
