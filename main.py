@@ -12,9 +12,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # تكوين التسجيل
 logging.basicConfig(
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('bot.log')
+    ]
 )
+logger = logging.getLogger(__name__)
 
 # حالات المحادثة
 CHOOSING_SHEET, CHOOSING_WORKSHEET, CHOOSING_ACTION, ENTERING_DATA = range(4)
@@ -25,7 +30,7 @@ def load_sheets_config():
         with open('sheets_config.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        logging.error(f"خطأ في قراءة ملف الإعدادات: {str(e)}")
+        logger.error(f"خطأ في قراءة ملف الإعدادات: {str(e)}")
         return {}
 
 # إنشاء اتصال Google Sheets
@@ -103,7 +108,7 @@ async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         return CHOOSING_WORKSHEET
         
     except Exception as e:
-        logging.error(f"خطأ في الوصول إلى الجدول: {str(e)}")
+        logger.error(f"خطأ في الوصول إلى الجدول: {str(e)}")
         await query.edit_message_text(
             "حدث خطأ في الوصول إلى الجدول. حاول مرة أخرى."
         )
@@ -143,53 +148,62 @@ async def handle_action_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
-    action = query.data
-    sheet_config = context.user_data['sheet_config']
+    action = query.data.split(':')[1]  # استعادة تقسيم النص
+    sheet_config = context.user_data.get('sheet_config', {})
     
     if action == "add":
         # تهيئة متغيرات الإدخال
         context.user_data['current_field_index'] = 0
-        context.user_data['values'] = {}  # قاموس جديد لتخزين القيم
+        context.user_data['values'] = {}
         
-        # إذا كان هناك حقل تاريخ تلقائي، نتخطاه
         fields = sheet_config.get('column_order', [])
-        if fields and sheet_config['column_types'].get(fields[0]) == 'date':
-            if sheet_config.get('date_options', {}).get(fields[0], {}).get('auto', False):
+        
+        if not fields:
+            await query.edit_message_text("خطأ في التكوين: لا توجد حقول محددة")
+            return ConversationHandler.END
+            
+        # معالجة الحقل الأول إذا كان تاريخاً تلقائياً
+        if sheet_config['column_types'].get(fields[0]) == 'date':
+            date_options = sheet_config.get('date_options', {}).get(fields[0], {})
+            if date_options.get('auto', False):
                 context.user_data['values'][fields[0]] = datetime.now().strftime('%Y-%m-%d')
                 context.user_data['current_field_index'] = 1
                 if len(fields) > 1:
                     await query.edit_message_text(f"الرجاء إدخال {fields[1]}:")
                     return ENTERING_DATA
         
-        # طلب أول حقل
+        # طلب الحقل الأول
         await query.edit_message_text(f"الرجاء إدخال {fields[0]}:")
         return ENTERING_DATA
-    
-    elif action == "cancel":
-        await query.edit_message_text("تم إلغاء العملية. أرسل /start للبدء من جديد.")
-        return ConversationHandler.END
-    
+        
     elif action == "view":
-        # عرض البيانات الحالية
         try:
             client = get_sheets_client()
-            sheet = client.open(context.user_data['current_sheet'])
-            worksheet = sheet.worksheet(sheet_config.get('worksheet_name', 'Sheet1'))
-            data = worksheet.get_all_records()
+            sheet_name = context.user_data['current_sheet']
+            sheet_config = context.user_data['sheet_config']
             
-            if not data:
-                message = "لا توجد بيانات في الجدول."
-            else:
-                # عرض آخر 5 صفوف
+            sheet = client.open(sheet_name)
+            worksheet = sheet.worksheet(sheet_config.get('worksheet_name', 'Sheet1'))
+            
+            # الحصول على البيانات
+            data = worksheet.get_all_values()
+            if len(data) > 1:  # تجاهل الصف الأول (العناوين)
+                last_rows = data[-5:]  # آخر 5 صفوف
                 message = "آخر 5 إدخالات:\n\n"
-                for row in data[-5:]:
-                    message += " | ".join([f"{k}: {v}" for k, v in row.items()]) + "\n"
+                for row in last_rows:
+                    message += " | ".join(row) + "\n"
+            else:
+                message = "لا توجد بيانات بعد"
             
             await query.edit_message_text(message)
         except Exception as e:
-            logging.error(f"خطأ في عرض البيانات: {str(e)}")
+            logger.error(f"خطأ في عرض البيانات: {str(e)}")
             await query.edit_message_text("حدث خطأ في عرض البيانات. حاول مرة أخرى.")
         
+        return ConversationHandler.END
+        
+    elif action == "cancel":
+        await query.edit_message_text("تم إلغاء العملية. أرسل /start للبدء من جديد.")
         return ConversationHandler.END
 
 async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -208,7 +222,7 @@ async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         current_field = fields[current_index]
         values[current_field] = update.message.text
         context.user_data['values'] = values
-        logging.info(f"تم تخزين القيمة '{update.message.text}' للحقل '{current_field}'")
+        logger.info(f"تم تخزين القيمة '{update.message.text}' للحقل '{current_field}'")
     
     # تحديث المؤشر للحقل التالي
     current_index += 1
@@ -218,7 +232,7 @@ async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # اكتملت جميع الحقول، حفظ البيانات
         try:
             client = get_sheets_client()
-            sheet_name = context.user_data['current_sheet']
+            sheet_name = context.user_data.get('current_sheet')
             
             sheet = client.open(sheet_name)
             worksheet = sheet.worksheet(sheet_config.get('worksheet_name', 'Sheet1'))
@@ -235,17 +249,11 @@ async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                     if date_options.get('auto', False):
                         value = datetime.now().strftime('%Y-%m-%d')
                 
-                # معالجة الأرقام
-                elif field_type == 'number':
-                    try:
-                        value = float(value) if value else 0
-                    except:
-                        value = 0
-                
                 row_data.append(value)
             
             # إضافة الصف
             worksheet.append_row(row_data)
+            logger.info(f"تم إضافة البيانات بنجاح: {row_data}")
             
             # مسح البيانات المؤقتة
             context.user_data.clear()
@@ -254,7 +262,7 @@ async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return ConversationHandler.END
             
         except Exception as e:
-            logging.error(f"خطأ في حفظ البيانات: {str(e)}")
+            logger.error(f"خطأ في حفظ البيانات: {str(e)}")
             await update.message.reply_text("حدث خطأ في حفظ البيانات. حاول مرة أخرى.")
             return ConversationHandler.END
 
@@ -285,40 +293,11 @@ async def get_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """إرسال معرف المستخدم"""
     await update.message.reply_text(f"معرف المستخدم الخاص بك هو: {update.effective_user.id}")
 
-if __name__ == '__main__':
-    # تعيين سياسة حلقة الأحداث للويندوز
-    if sys.platform == 'win32':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    
-    # إنشاء وتشغيل التطبيق
-    app = Application.builder().token(config.TELEGRAM_TOKEN).build()
-    
-    # إضافة المعالجات
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            CHOOSING_SHEET: [
-                CallbackQueryHandler(handle_sheet_choice, pattern=r'^sheet:')
-            ],
-            CHOOSING_WORKSHEET: [
-                CallbackQueryHandler(handle_worksheet_choice, pattern=r'^worksheet:')
-            ],
-            CHOOSING_ACTION: [
-                CallbackQueryHandler(handle_action_choice, pattern=r'^action:')
-            ],
-            ENTERING_DATA: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_data_entry)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-        per_message=False
-    )
-    
-    app.add_handler(conv_handler)
-    app.add_handler(CommandHandler('myid', get_my_id))
-    
-    print("\n=== بدء تشغيل بوت Telegram للتعامل مع Google Sheets ===")
-    print("جاري التحقق من الإعدادات والملفات المطلوبة...")
+def main():
+    """تشغيل البوت"""
+    # إعداد السجلات
+    logger.info("=== بدء تشغيل بوت Telegram للتعامل مع Google Sheets ===")
+    logger.info("جاري التحقق من الإعدادات والملفات المطلوبة...")
     
     try:
         # التحقق من وجود الملفات المطلوبة
@@ -330,36 +309,73 @@ if __name__ == '__main__':
         
         for file, description in required_files.items():
             if os.path.exists(file):
-                print(f"[+] تم العثور على {description} ({file})")
+                logger.info(f"تم العثور على {description} ({file})")
             else:
-                print(f"[-] لم يتم العثور على {description} ({file})")
+                logger.error(f"لم يتم العثور على {description} ({file})")
                 raise FileNotFoundError(f"الملف المطلوب غير موجود: {file}")
 
         # التحقق من التوكن
         if not config.TELEGRAM_TOKEN:
+            logger.error("لم يتم العثور على توكن البوت في ملف .env")
             raise ValueError("لم يتم العثور على توكن البوت في ملف .env")
-        print(f"[+] تم التحقق من توكن البوت: {config.TELEGRAM_TOKEN[:20]}...")
+        logger.info(f"تم التحقق من توكن البوت: {config.TELEGRAM_TOKEN[:10]}...")
 
         # قراءة إعدادات الجداول
         sheets_config = load_sheets_config()
         if sheets_config:
-            print(f"[+] تم تحميل إعدادات الجداول: {len(sheets_config)} جدول")
-            for sheet_name in sheets_config:
-                print(f"    - {sheet_name}")
+            logger.info(f"تم تحميل إعدادات الجداول: {len(sheets_config.get('sheets', []))} جدول")
+            for sheet in sheets_config.get('sheets', []):
+                logger.info(f"    - {sheet.get('name', 'غير معروف')}")
         else:
-            print("[!] تحذير: لم يتم العثور على أي جداول في ملف الإعدادات")
+            logger.warning("لم يتم العثور على أي جداول في ملف الإعدادات")
 
+        print("\n=== بدء تشغيل بوت Telegram للتعامل مع Google Sheets ===")
+        print("جاري التحقق من الإعدادات والملفات المطلوبة...")
+        
+        # إنشاء وتشغيل التطبيق
+        app = Application.builder().token(config.TELEGRAM_TOKEN).build()
+        
+        # إضافة المعالجات
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                CHOOSING_SHEET: [
+                    CallbackQueryHandler(handle_sheet_choice)
+                ],
+                CHOOSING_WORKSHEET: [
+                    CallbackQueryHandler(handle_worksheet_choice)
+                ],
+                CHOOSING_ACTION: [
+                    CallbackQueryHandler(handle_action_choice)
+                ],
+                ENTERING_DATA: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_data_entry)
+                ]
+            },
+            fallbacks=[CommandHandler('cancel', cancel)]
+        )
+        
+        app.add_handler(conv_handler)
+        app.add_handler(CommandHandler('myid', get_my_id))
+        
         print("\n=== البوت جاهز للاستخدام! ===")
         print("- أرسل /start في Telegram لبدء استخدام البوت")
         print("- أرسل /myid للحصول على معرف المستخدم الخاص بك")
-        print("- أرسل /cancel لإلغاء العملية الحالية")
+        print("- أرسل /cancel لإلغاء العملية")
         print("\nجاري تشغيل البوت... اضغط Ctrl+C للإيقاف")
         
         # تشغيل البوت
         app.run_polling()
         
     except KeyboardInterrupt:
-        print("\nتم إيقاف البوت بواسطة المستخدم")
+        logger.info("تم إيقاف البوت بواسطة المستخدم")
     except Exception as e:
+        logger.error(f"خطأ في تشغيل البوت: {str(e)}", exc_info=True)
         print(f"\n[!] حدث خطأ: {str(e)}")
-        logging.error(f"خطأ في تشغيل البوت: {str(e)}", exc_info=True)
+
+if __name__ == '__main__':
+    # تعيين سياسة حلقة الأحداث للويندوز
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    
+    main()
