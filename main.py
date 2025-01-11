@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 
 # حالات المحادثة
-CHOOSING_SHEET, CHOOSING_ACTION, ENTERING_DATA = range(3)
+CHOOSING_SHEET, CHOOSING_WORKSHEET, CHOOSING_ACTION, ENTERING_DATA = range(4)
 
 # قراءة إعدادات الجداول
 def load_sheets_config():
@@ -39,29 +39,34 @@ def get_sheets_client():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """بداية المحادثة وعرض الجداول المتاحة"""
     user_id = str(update.effective_user.id)
+    available_sheets = []
+    
+    # تحميل إعدادات الجداول
     sheets_config = load_sheets_config()
     
-    # التحقق من صلاحيات المستخدم
-    available_sheets = []
-    for sheet_name, sheet_config in sheets_config.items():
-        if sheet_config.get('authorized_user_id') == user_id:
+    # التحقق من الجداول المتاحة للمستخدم
+    for sheet_name, config in sheets_config.items():
+        if config.get('authorized_user_id') == user_id:
             available_sheets.append(sheet_name)
     
     if not available_sheets:
         await update.message.reply_text(
-            "عذراً، ليس لديك صلاحية الوصول إلى أي جدول."
+            "عذراً، لا يوجد لديك أي جداول متاحة."
         )
         return ConversationHandler.END
     
-    keyboard = []
-    for sheet_name in available_sheets:
-        keyboard.append([InlineKeyboardButton(sheet_name, callback_data=f"sheet_{sheet_name}")])
-    
+    # إنشاء أزرار للجداول المتاحة
+    keyboard = [
+        [InlineKeyboardButton(sheet_name, callback_data=f"sheet:{sheet_name}")]
+        for sheet_name in available_sheets
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        "مرحباً! اختر الجدول الذي تريد العمل عليه:",
+        "اختر الجدول:",
         reply_markup=reply_markup
     )
+    
     return CHOOSING_SHEET
 
 async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -69,26 +74,68 @@ async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     await query.answer()
     
-    sheet_name = query.data.replace("sheet_", "")
+    sheet_name = query.data.split(':')[1]
     context.user_data['current_sheet'] = sheet_name
     
-    # قراءة إعدادات الجدول المحدد
+    # تحميل إعدادات الجدول
     sheets_config = load_sheets_config()
     sheet_config = sheets_config.get(sheet_name, {})
     context.user_data['sheet_config'] = sheet_config
     
-    # إنشاء لوحة مفاتيح للإجراءات
-    keyboard = [
-        [InlineKeyboardButton("إضافة بيانات", callback_data="action_add")],
-        [InlineKeyboardButton("عرض البيانات", callback_data="action_view")],
-        [InlineKeyboardButton("إلغاء", callback_data="action_cancel")]
-    ]
+    try:
+        # الحصول على قائمة الأوراق في الجدول
+        client = get_sheets_client()
+        sheet = client.open(sheet_name)
+        worksheets = sheet.worksheets()
+        
+        # إنشاء أزرار للأوراق
+        keyboard = [
+            [InlineKeyboardButton(ws.title, callback_data=f"worksheet:{ws.title}")]
+            for ws in worksheets
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "اختر الورقة:",
+            reply_markup=reply_markup
+        )
+        
+        return CHOOSING_WORKSHEET
+        
+    except Exception as e:
+        logging.error(f"خطأ في الوصول إلى الجدول: {str(e)}")
+        await query.edit_message_text(
+            "حدث خطأ في الوصول إلى الجدول. حاول مرة أخرى."
+        )
+        return ConversationHandler.END
+
+async def handle_worksheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """معالجة اختيار الورقة"""
+    query = update.callback_query
+    await query.answer()
     
+    worksheet_name = query.data.split(':')[1]
+    
+    # تحديث اسم الورقة في إعدادات الجدول
+    sheet_name = context.user_data['current_sheet']
+    sheet_config = context.user_data['sheet_config']
+    sheet_config['worksheet_name'] = worksheet_name
+    
+    # إنشاء أزرار للإجراءات
+    keyboard = [
+        [
+            InlineKeyboardButton("إضافة بيانات", callback_data="action:add"),
+            InlineKeyboardButton("عرض البيانات", callback_data="action:view")
+        ],
+        [InlineKeyboardButton("إلغاء", callback_data="action:cancel")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await query.edit_message_text(
-        f"اخترت جدول {sheet_name}. ماذا تريد أن تفعل؟",
+        f"تم اختيار ورقة {worksheet_name}. اختر الإجراء المطلوب:",
         reply_markup=reply_markup
     )
+    
     return CHOOSING_ACTION
 
 async def handle_action_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -96,24 +143,32 @@ async def handle_action_choice(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
     
-    action = query.data.replace("action_", "")
-    if action == "cancel":
+    action = query.data
+    sheet_config = context.user_data['sheet_config']
+    
+    if action == "add":
+        # تهيئة متغيرات الإدخال
+        context.user_data['current_field_index'] = 0
+        context.user_data['values'] = {}  # قاموس جديد لتخزين القيم
+        
+        # إذا كان هناك حقل تاريخ تلقائي، نتخطاه
+        fields = sheet_config.get('column_order', [])
+        if fields and sheet_config['column_types'].get(fields[0]) == 'date':
+            if sheet_config.get('date_options', {}).get(fields[0], {}).get('auto', False):
+                context.user_data['values'][fields[0]] = datetime.now().strftime('%Y-%m-%d')
+                context.user_data['current_field_index'] = 1
+                if len(fields) > 1:
+                    await query.edit_message_text(f"الرجاء إدخال {fields[1]}:")
+                    return ENTERING_DATA
+        
+        # طلب أول حقل
+        await query.edit_message_text(f"الرجاء إدخال {fields[0]}:")
+        return ENTERING_DATA
+    
+    elif action == "cancel":
         await query.edit_message_text("تم إلغاء العملية. أرسل /start للبدء من جديد.")
         return ConversationHandler.END
     
-    context.user_data['current_action'] = action
-    sheet_config = context.user_data.get('sheet_config', {})
-    
-    if action == "add":
-        # تحضير حقول الإدخال
-        fields = list(sheet_config.get('column_types', {}).keys())
-        context.user_data['fields'] = fields
-        context.user_data['current_field_index'] = 0
-        
-        await query.edit_message_text(
-            f"أدخل {fields[0]}:"
-        )
-        return ENTERING_DATA
     elif action == "view":
         # عرض البيانات الحالية
         try:
@@ -139,34 +194,51 @@ async def handle_action_choice(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """معالجة إدخال البيانات"""
-    fields = context.user_data.get('fields', [])
+    sheet_config = context.user_data.get('sheet_config')
+    if not sheet_config:
+        await update.message.reply_text("حدث خطأ. الرجاء البدء من جديد باستخدام /start")
+        return ConversationHandler.END
+
+    fields = sheet_config.get('column_order', [])
     current_index = context.user_data.get('current_field_index', 0)
+    values = context.user_data.get('values', {})
     
     # تخزين القيمة المدخلة
-    if current_index > 0:  # تخزين القيمة السابقة
-        context.user_data[fields[current_index - 1]] = update.message.text
+    if update.message and current_index < len(fields):
+        current_field = fields[current_index]
+        values[current_field] = update.message.text
+        context.user_data['values'] = values
+        logging.info(f"تم تخزين القيمة '{update.message.text}' للحقل '{current_field}'")
+    
+    # تحديث المؤشر للحقل التالي
+    current_index += 1
+    context.user_data['current_field_index'] = current_index
     
     if current_index >= len(fields):
         # اكتملت جميع الحقول، حفظ البيانات
         try:
             client = get_sheets_client()
             sheet_name = context.user_data['current_sheet']
-            sheet_config = context.user_data['sheet_config']
             
             sheet = client.open(sheet_name)
             worksheet = sheet.worksheet(sheet_config.get('worksheet_name', 'Sheet1'))
             
-            # تجهيز البيانات للإدخال
+            # تجهيز البيانات للإدخال بالترتيب الصحيح
             row_data = []
             for field in fields:
-                value = context.user_data.get(field, '')
+                value = values.get(field, '')
                 field_type = sheet_config['column_types'].get(field)
                 
-                if field_type == 'date' and sheet_config['date_options'][field].get('auto'):
-                    value = datetime.now().strftime('%Y-%m-%d')
+                # معالجة حقول التاريخ
+                if field_type == 'date':
+                    date_options = sheet_config.get('date_options', {}).get(field, {})
+                    if date_options.get('auto', False):
+                        value = datetime.now().strftime('%Y-%m-%d')
+                
+                # معالجة الأرقام
                 elif field_type == 'number':
                     try:
-                        value = float(value)
+                        value = float(value) if value else 0
                     except:
                         value = 0
                 
@@ -174,17 +246,34 @@ async def handle_data_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             
             # إضافة الصف
             worksheet.append_row(row_data)
+            
+            # مسح البيانات المؤقتة
+            context.user_data.clear()
+            
             await update.message.reply_text("تم حفظ البيانات بنجاح! أرسل /start للبدء من جديد.")
+            return ConversationHandler.END
             
         except Exception as e:
             logging.error(f"خطأ في حفظ البيانات: {str(e)}")
             await update.message.reply_text("حدث خطأ في حفظ البيانات. حاول مرة أخرى.")
-        
-        return ConversationHandler.END
-    
+            return ConversationHandler.END
+
     # طلب الحقل التالي
-    await update.message.reply_text(f"أدخل {fields[current_index]}:")
-    context.user_data['current_field_index'] = current_index + 1
+    next_field = fields[current_index]
+    field_type = sheet_config['column_types'].get(next_field)
+    
+    # تخطي الحقول التلقائية
+    while field_type == 'date' and sheet_config.get('date_options', {}).get(next_field, {}).get('auto', False):
+        values[next_field] = datetime.now().strftime('%Y-%m-%d')
+        context.user_data['values'] = values
+        current_index += 1
+        if current_index >= len(fields):
+            return await handle_data_entry(update, context)
+        next_field = fields[current_index]
+        field_type = sheet_config['column_types'].get(next_field)
+        context.user_data['current_field_index'] = current_index
+    
+    await update.message.reply_text(f"الرجاء إدخال {next_field}:")
     return ENTERING_DATA
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -209,10 +298,13 @@ if __name__ == '__main__':
         entry_points=[CommandHandler('start', start)],
         states={
             CHOOSING_SHEET: [
-                CallbackQueryHandler(handle_sheet_choice, pattern=r'^sheet_')
+                CallbackQueryHandler(handle_sheet_choice, pattern=r'^sheet:')
+            ],
+            CHOOSING_WORKSHEET: [
+                CallbackQueryHandler(handle_worksheet_choice, pattern=r'^worksheet:')
             ],
             CHOOSING_ACTION: [
-                CallbackQueryHandler(handle_action_choice, pattern=r'^action_')
+                CallbackQueryHandler(handle_action_choice, pattern=r'^action:')
             ],
             ENTERING_DATA: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_data_entry)

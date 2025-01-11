@@ -3,17 +3,20 @@
         "sheet_name": "مرابح غفران للسياحة",
         "worksheet_name": "الورقة1",
         "column_types": {
-            "التاريخ ": "date",
+            "التاريخ": "date",
             "تسمية": "text",
-            "المربح ": "number",
+            "المربح": "number",
             "ملاحظات": "text"
         },
+        "column_order": ["التاريخ", "تسمية", "المربح", "ملاحظات"],
         "date_options": {
-            "التاريخ ": {
+            "التاريخ": {
                 "include_time": false,
-                "auto": true
+                "auto": true,
+                "format": "date_only"
             }
         },
-        "authorized_user_id": "773012141"
+        "authorized_user_id": "773012141",
+        "authorized_user_ids": []
     }
 }

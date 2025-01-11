@@ -21,26 +21,11 @@ class SheetsGUI:
         
         # تهيئة السمة
         self.theme = Theme()
-        
-        # إضافة زر تبديل السمة
-        theme_button = ttk.Button(
-            root,
-            text="🌓",  # رمز القمر والشمس
-            width=3,
-            command=self.toggle_theme,
-            style='Theme.TButton'
-        )
-        theme_button.pack(anchor=tk.NE, padx=5, pady=5)
-        
-        # تطبيق السمة الأولية
         self.theme.apply_theme(root)
         
         # تكوين النافذة
         self.root.geometry("800x600")
         self.root.minsize(600, 400)
-        
-        # تعيين الخط للنافذة بأكملها
-        self.set_font()
         
         # إنشاء الإطار الرئيسي
         self.main_frame = ttk.Frame(root, padding="10")
@@ -338,27 +323,7 @@ class SheetsGUI:
         
         # إنشاء جدول لعرض المعلومات
         tree = ttk.Treeview(table_frame, columns=('name', 'worksheet', 'users'),
-                          show='headings', height=10, style='Custom.Treeview')
-        
-        # تكوين نمط مخصص للجدول
-        style = ttk.Style()
-        colors = self.theme.themes[self.theme.current_theme]
-        style.configure('Custom.Treeview',
-                      background=colors['tree_bg'],
-                      foreground=colors['tree_fg'],
-                      fieldbackground=colors['tree_bg'],
-                      borderwidth=0,
-                      rowheight=25)
-        
-        style.configure('Custom.Treeview.Heading',
-                      background=colors['header_bg'],
-                      foreground=colors['header_fg'],
-                      relief='flat',
-                      borderwidth=1)
-        
-        style.map('Custom.Treeview',
-                 background=[('selected', colors['selected_bg'])],
-                 foreground=[('selected', colors['selected_fg'])])
+                          show='headings', height=10)
         
         tree.heading('name', text='اسم الجدول')
         tree.heading('worksheet', text='اسم الصفحة')
@@ -378,33 +343,15 @@ class SheetsGUI:
                 users
             ))
             
-        # إنشاء إطار للتمرير مع خلفية مناسبة
-        scroll_frame = ttk.Frame(table_frame, style='Custom.TFrame')
-        scroll_frame.pack(side=tk.RIGHT, fill=tk.Y)
-        
         # إضافة شريط التمرير
-        scrollbar = ttk.Scrollbar(scroll_frame, orient=tk.VERTICAL,
-                                command=tree.yview,
-                                style='Custom.Vertical.TScrollbar')
-        scrollbar.pack(fill=tk.Y)
+        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         tree.configure(yscrollcommand=scrollbar.set)
-        
-        # تكوين نمط مخصص لشريط التمرير
-        style.configure('Custom.Vertical.TScrollbar',
-                      background=colors['bg'],
-                      troughcolor=colors['tree_bg'],
-                      bordercolor=colors['tree_bg'],
-                      arrowcolor=colors['fg'],
-                      relief='flat')
-        
-        # تكوين نمط مخصص للإطار
-        style.configure('Custom.TFrame',
-                      background=colors['bg'])
         
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # إطار للأزرار
-        buttons_frame = ttk.Frame(self.info_frame, style='Custom.TFrame')
+        buttons_frame = ttk.Frame(self.info_frame)
         buttons_frame.pack(fill=tk.X, padx=5, pady=5)
         
         def edit_selected():
@@ -427,86 +374,193 @@ class SheetsGUI:
         
         # إضافة أزرار التحكم
         ttk.Button(buttons_frame, text="تعديل",
-                  style='Success.TButton',
                   command=edit_selected).pack(side=tk.LEFT, padx=5)
         
         ttk.Button(buttons_frame, text="حذف",
-                  style='Danger.TButton',
                   command=delete_selected).pack(side=tk.LEFT, padx=5)
 
     def show_edit_dialog(self, sheet_name):
         """عرض نافذة تعديل الجدول"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"تعديل الجدول - {sheet_name}")
-        dialog.geometry("500x400")
+        if sheet_name not in self.current_config:
+            messagebox.showerror("خطأ", "لم يتم العثور على الجدول المحدد")
+            return
         
-        config = self.current_config[sheet_name]
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"تعديل جدول - {sheet_name}")
+        dialog.geometry("600x600")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
         # إطار للمعلومات الأساسية
-        basic_frame = ttk.LabelFrame(dialog, text="معلومات الجدول", padding=10)
-        basic_frame.pack(fill=tk.X, padx=5, pady=5)
+        basic_info_frame = ttk.LabelFrame(main_frame, text="معلومات أساسية", padding="5")
+        basic_info_frame.pack(fill=tk.X, pady=5)
         
         # اسم الصفحة
-        ttk.Label(basic_frame, text="اسم الصفحة:").pack(anchor=tk.W)
-        worksheet_var = tk.StringVar(value=config.get('worksheet_name', ''))
-        worksheet_entry = ttk.Entry(basic_frame, textvariable=worksheet_var)
-        worksheet_entry.pack(fill=tk.X, pady=5)
+        worksheet_frame = ttk.Frame(basic_info_frame)
+        worksheet_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(worksheet_frame, text="اسم الصفحة:").pack(side=tk.LEFT)
+        worksheet_var = tk.StringVar(value=self.current_config[sheet_name].get('worksheet_name', ''))
+        worksheet_entry = ttk.Entry(worksheet_frame, textvariable=worksheet_var)
+        worksheet_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
-        # المستخدمين المصرح لهم
-        users_frame = ttk.LabelFrame(dialog, text="المستخدمين المصرح لهم", padding=10)
-        users_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # معرف المستخدم
+        user_frame = ttk.Frame(basic_info_frame)
+        user_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(user_frame, text="معرف المستخدم:").pack(side=tk.LEFT)
+        user_var = tk.StringVar(value=self.current_config[sheet_name].get('authorized_user_id', ''))
+        user_entry = ttk.Entry(user_frame, textvariable=user_var)
+        user_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
-        # خيار السماح لجميع المستخدمين
-        allow_all_var = tk.BooleanVar(value=config.get('authorized_user_ids') == '*')
-        ttk.Checkbutton(users_frame, text="السماح لجميع المستخدمين",
-                       variable=allow_all_var).pack(anchor=tk.W)
+        # إطار لإعدادات الأعمدة
+        columns_frame = ttk.LabelFrame(main_frame, text="إعدادات الأعمدة", padding="5")
+        columns_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # قائمة المستخدمين
-        users_list = tk.Text(users_frame, height=5)
-        users_list.pack(fill=tk.BOTH, expand=True, pady=5)
-        if isinstance(config.get('authorized_user_ids'), list):
-            users_list.insert('1.0', ','.join(map(str, config['authorized_user_ids'])))
+        # إنشاء جدول لعرض الأعمدة
+        tree = ttk.Treeview(columns_frame, columns=('column', 'type', 'auto_date', 'date_format'),
+                          show='headings', height=10)
         
-        # أزرار الإجراءات
-        actions_frame = ttk.Frame(dialog, padding=10)
-        actions_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        tree.heading('column', text='اسم العمود')
+        tree.heading('type', text='نوع البيانات')
+        tree.heading('auto_date', text='تاريخ تلقائي')
+        tree.heading('date_format', text='تنسيق التاريخ')
+        
+        tree.column('column', width=150)
+        tree.column('type', width=100)
+        tree.column('auto_date', width=100)
+        tree.column('date_format', width=150)
+        
+        # إضافة البيانات للجدول
+        column_types = self.current_config[sheet_name].get('column_types', {})
+        date_options = self.current_config[sheet_name].get('date_options', {})
+        
+        for column, type_ in column_types.items():
+            auto_date = 'نعم' if date_options.get(column, {}).get('auto', False) else 'لا'
+            date_format = date_options.get(column, {}).get('format', '-')
+            tree.insert('', tk.END, values=(column, type_, auto_date, date_format))
+        
+        # إضافة شريط التمرير
+        scrollbar = ttk.Scrollbar(columns_frame, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # إطار للأزرار الخاصة بالأعمدة
+        col_buttons_frame = ttk.Frame(columns_frame)
+        col_buttons_frame.pack(fill=tk.X, pady=5)
+        
+        def edit_column():
+            selection = tree.selection()
+            if not selection:
+                messagebox.showwarning("تنبيه", "الرجاء اختيار عمود للتعديل")
+                return
+                
+            item = tree.selection()[0]
+            column_name = tree.item(item)['values'][0]
+            
+            edit_dialog = tk.Toplevel(dialog)
+            edit_dialog.title(f"تعديل عمود - {column_name}")
+            edit_dialog.transient(dialog)
+            edit_dialog.grab_set()
+            
+            # نوع البيانات
+            type_frame = ttk.Frame(edit_dialog, padding="5")
+            type_frame.pack(fill=tk.X, pady=5)
+            ttk.Label(type_frame, text="نوع البيانات:").pack(side=tk.LEFT)
+            type_var = tk.StringVar(value=column_types.get(column_name, 'text'))
+            type_combo = ttk.Combobox(type_frame, textvariable=type_var, values=['text', 'number', 'date'])
+            type_combo.pack(side=tk.LEFT, padx=5)
+            
+            # خيارات التاريخ
+            date_frame = ttk.LabelFrame(edit_dialog, text="خيارات التاريخ", padding="5")
+            
+            def on_type_change(*args):
+                if type_var.get() == 'date':
+                    date_frame.pack(fill=tk.X, pady=5)
+                else:
+                    date_frame.pack_forget()
+            
+            type_var.trace('w', on_type_change)
+            
+            # تفعيل التاريخ التلقائي
+            auto_var = tk.BooleanVar(value=date_options.get(column_name, {}).get('auto', False))
+            auto_check = ttk.Checkbutton(date_frame, text="تعبئة التاريخ تلقائياً",
+                                       variable=auto_var)
+            auto_check.pack(fill=tk.X)
+            
+            # تنسيق التاريخ
+            format_frame = ttk.Frame(date_frame)
+            format_frame.pack(fill=tk.X, pady=5)
+            ttk.Label(format_frame, text="تنسيق التاريخ:").pack(side=tk.LEFT)
+            
+            format_var = tk.StringVar(value=date_options.get(column_name, {}).get('format', 'date_time'))
+            format_combo = ttk.Combobox(format_frame, textvariable=format_var, 
+                                      values=['date_time', 'date_only', 'time_only'])
+            format_combo['values'] = [
+                'date_time - (YYYY-MM-DD HH:MM:SS)',
+                'date_only - (YYYY-MM-DD)',
+                'time_only - (HH:MM:SS)'
+            ]
+            format_combo.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+            
+            # عرض إطار التاريخ إذا كان النوع تاريخ
+            if type_var.get() == 'date':
+                date_frame.pack(fill=tk.X, pady=5)
+            
+            def save_column():
+                # حفظ التغييرات
+                column_types[column_name] = type_var.get()
+                if type_var.get() == 'date':
+                    if column_name not in date_options:
+                        date_options[column_name] = {}
+                    date_options[column_name]['auto'] = auto_var.get()
+                    date_options[column_name]['format'] = format_var.get().split(' - ')[0]
+                elif column_name in date_options:
+                    del date_options[column_name]
+                
+                # تحديث العرض
+                tree.set(item, 'type', type_var.get())
+                tree.set(item, 'auto_date', 'نعم' if auto_var.get() else 'لا')
+                tree.set(item, 'date_format', format_var.get().split(' - ')[0])
+                edit_dialog.destroy()
+            
+            # أزرار الحفظ والإلغاء
+            buttons_frame = ttk.Frame(edit_dialog, padding="5")
+            buttons_frame.pack(fill=tk.X, pady=5)
+            ttk.Button(buttons_frame, text="حفظ", command=save_column).pack(side=tk.LEFT, padx=5)
+            ttk.Button(buttons_frame, text="إلغاء", command=edit_dialog.destroy).pack(side=tk.LEFT)
+        
+        ttk.Button(col_buttons_frame, text="تعديل العمود المحدد", command=edit_column).pack(side=tk.LEFT, padx=5)
+        
+        # إطار للأزرار
+        actions_frame = ttk.Frame(main_frame)
+        actions_frame.pack(fill=tk.X, pady=10)
         
         def save_changes():
-            # تحديث الإعدادات
-            config['worksheet_name'] = worksheet_var.get()
-            if allow_all_var.get():
-                config['authorized_user_ids'] = '*'
-            else:
-                users_text = users_list.get('1.0', tk.END).strip()
-                if users_text:
-                    config['authorized_user_ids'] = [
-                        user.strip() for user in users_text.split(',')
-                    ]
-                else:
-                    config['authorized_user_ids'] = []
-            
+            # حفظ التغييرات في الإعدادات
+            self.current_config[sheet_name].update({
+                'worksheet_name': worksheet_var.get(),
+                'authorized_user_id': user_var.get(),
+                'column_types': column_types,
+                'date_options': date_options
+            })
             self.save_config()
+            messagebox.showinfo("نجاح", "تم حفظ التغييرات بنجاح")
             dialog.destroy()
             self.show_sheets_list()
         
         def delete_sheet():
-            if messagebox.askyesno("تأكيد الحذف",
-                                 f"هل أنت متأكد من حذف الجدول {sheet_name}؟"):
+            if messagebox.askyesno("تأكيد", "هل أنت متأكد من حذف هذا الجدول؟"):
                 del self.current_config[sheet_name]
                 self.save_config()
                 dialog.destroy()
                 self.show_sheets_list()
         
-        ttk.Button(actions_frame, text="حفظ التغييرات",
-                  style='Success.TButton',
-                  command=save_changes).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(actions_frame, text="حذف الجدول",
-                  style='Danger.TButton',
-                  command=delete_sheet).pack(side=tk.LEFT, padx=5)
-        
-        ttk.Button(actions_frame, text="إلغاء",
-                  command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions_frame, text="حفظ التغييرات", command=save_changes).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions_frame, text="حذف الجدول", command=delete_sheet).pack(side=tk.LEFT, padx=5)
+        ttk.Button(actions_frame, text="إلغاء", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
 
     def show_delete_dialog(self):
         """عرض نافذة حذف جدول"""
