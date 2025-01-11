@@ -8,11 +8,16 @@
             "المربح": "number",
             "ملاحظات": "text"
         },
-        "column_order": ["التاريخ", "تسمية", "المربح", "ملاحظات"],
+        "column_order": [
+            "التاريخ",
+            "تسمية",
+            "المربح",
+            "ملاحظات"
+        ],
         "date_options": {
             "التاريخ": {
-                "include_time": false,
                 "auto": true,
+                "include_time": false,
                 "format": "date_only"
             }
         },

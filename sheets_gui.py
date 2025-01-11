@@ -409,8 +409,8 @@ class SheetsGUI:
         # معرف المستخدم
         user_frame = ttk.Frame(basic_info_frame)
         user_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(user_frame, text="معرف المستخدم:").pack(side=tk.LEFT)
-        user_var = tk.StringVar(value=self.current_config[sheet_name].get('authorized_user_id', ''))
+        ttk.Label(user_frame, text="معرفات المستخدمين:").pack(side=tk.LEFT)
+        user_var = tk.StringVar(value=self.current_config[sheet_name].get('authorized_user_ids', ''))
         user_entry = ttk.Entry(user_frame, textvariable=user_var)
         user_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
@@ -542,7 +542,7 @@ class SheetsGUI:
             # حفظ التغييرات في الإعدادات
             self.current_config[sheet_name].update({
                 'worksheet_name': worksheet_var.get(),
-                'authorized_user_id': user_var.get(),
+                'authorized_user_ids': user_var.get(),
                 'column_types': column_types,
                 'date_options': date_options
             })

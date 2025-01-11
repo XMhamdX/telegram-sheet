@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة جداول البيانات</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #111827;
+            color: #e5e7eb;
+        }
+        .rtl {
+            direction: rtl;
+        }
+        .ltr {
+            direction: ltr;
+        }
+        /* تخصيص scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+        .custom-input {
+            background-color: #1f2937;
+            border-color: #374151;
+            color: #e5e7eb;
+        }
+        .custom-input:focus {
+            border-color: #3b82f6;
+            ring-color: #3b82f6;
+        }
+        .custom-select {
+            background-color: #1f2937;
+            border-color: #374151;
+            color: #e5e7eb;
+        }
+        .custom-card {
+            background-color: #1f2937;
+            border: 1px solid #374151;
+        }
+    </style>
+</head>
+<body class="rtl min-h-screen bg-gray-900">
+    <div class="min-h-screen">
+        <nav class="bg-gray-800 border-b border-gray-700">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex">
+                        <div class="flex-shrink-0 flex items-center">
+                            <h1 class="text-xl font-bold text-white">إدارة جداول البيانات</h1>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            <!-- إضافة جدول جديد -->
+            <div class="mb-6">
+                <button onclick="showAddSheetModal()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
+                    <svg class="ml-2 -mr-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    إضافة جدول جديد
+                </button>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 overflow-hidden">
+                <!-- اختيار الجدول -->
+                <div class="p-6 border-b border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">اختر الجدول</label>
+                            <select id="sheetSelect" class="custom-select mt-1 block w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                {% for sheet_name in config %}
+                                <option value="{{ sheet_name }}">{{ sheet_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mr-4">
+                            <button onclick="deleteCurrentSheet()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors duration-200">
+                                حذف الجدول
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- إعدادات الجدول -->
+                <div class="p-6 space-y-6">
+                    <!-- اسم ورقة العمل -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">اسم ورقة العمل</label>
+                        <input type="text" id="worksheetName" class="custom-input mt-1 block w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+
+                    <!-- المعرفات المصرح لها -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">المعرفات المصرح لها</label>
+                        <div id="userIds" class="space-y-4">
+                            <!-- سيتم إضافة المعرفات هنا -->
+                        </div>
+                        <button onclick="addUserId()" class="mt-4 inline-flex items-center px-4 py-2 border border-blue-500 text-sm font-medium rounded-md text-blue-400 bg-transparent hover:bg-blue-900 transition-colors duration-200">
+                            <svg class="ml-2 -mr-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            إضافة معرف
+                        </button>
+                    </div>
+
+                    <!-- الأعمدة -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">الأعمدة</label>
+                        <div id="columns" class="space-y-4">
+                            <!-- سيتم إضافة الأعمدة هنا -->
+                        </div>
+                        <button onclick="addColumn()" class="mt-4 inline-flex items-center px-4 py-2 border border-blue-500 text-sm font-medium rounded-md text-blue-400 bg-transparent hover:bg-blue-900 transition-colors duration-200">
+                            <svg class="ml-2 -mr-1 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            إضافة عمود
+                        </button>
+                    </div>
+
+                    <!-- زر الحفظ -->
+                    <div class="pt-4">
+                        <button onclick="saveChanges()" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors duration-200">
+                            حفظ التغييرات
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- نافذة إضافة جدول جديد -->
+    <div id="addSheetModal" class="fixed inset-0 bg-black bg-opacity-75 hidden">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 p-6 max-w-md w-full mx-4">
+                <h2 class="text-lg font-medium mb-4 text-white">إضافة جدول جديد</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">اسم الجدول</label>
+                        <input type="text" id="newSheetName" class="custom-input mt-1 block w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="اسم الجدول الجديد">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">معرف جدول البيانات</label>
+                        <div class="flex space-x-2 space-x-reverse">
+                            <input type="text" id="newSpreadsheetId" class="custom-input ltr flex-1 py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Spreadsheet ID">
+                            <button onclick="verifySheet()" class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
+                                تحقق
+                            </button>
+                        </div>
+                        <p class="mt-1 text-sm text-gray-400">يمكنك نسخ المعرف من رابط جدول البيانات</p>
+                    </div>
+                    <div id="sheetDetails" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">اسم ورقة العمل</label>
+                            <select id="newWorksheetName" class="custom-select mt-1 block w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <!-- سيتم ملء الخيارات تلقائياً -->
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-2">الأعمدة المكتشفة</label>
+                            <div id="discoveredColumns" class="mt-2 p-3 bg-gray-700 bg-opacity-50 rounded-md text-sm text-gray-300">
+                                <!-- سيتم ملء الأعمدة تلقائياً -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 space-x-reverse">
+                        <button onclick="hideAddSheetModal()" class="inline-flex justify-center py-2 px-4 border border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-300 bg-transparent hover:bg-gray-700 transition-colors duration-200">
+                            إلغاء
+                        </button>
+                        <button id="addSheetBtn" onclick="addNewSheet()" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200" disabled>
+                            إضافة
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- الإشعارات -->
+    <div id="toast" class="fixed bottom-4 right-4 hidden">
+        <div class="bg-green-600 text-white px-6 py-3 rounded-lg shadow-xl">
+            <span id="toastMessage"></span>
+        </div>
+    </div>
+
+    <script>
+        let config = {{ config|tojson|safe }};
+        
+        // إظهار/إخفاء نافذة إضافة جدول جديد
+        function showAddSheetModal() {
+            document.getElementById('addSheetModal').classList.remove('hidden');
+        }
+        
+        function hideAddSheetModal() {
+            document.getElementById('addSheetModal').classList.add('hidden');
+            document.getElementById('newSheetName').value = '';
+            document.getElementById('newSpreadsheetId').value = '';
+            document.getElementById('sheetDetails').classList.add('hidden');
+            document.getElementById('addSheetBtn').disabled = true;
+        }
+
+        // التحقق من الجدول وجلب معلوماته
+        async function verifySheet() {
+            const sheetName = document.getElementById('newSheetName').value.trim();
+            const spreadsheetId = document.getElementById('newSpreadsheetId').value.trim();
+            
+            if (!sheetName || !spreadsheetId) {
+                showToast('يرجى ملء اسم الجدول ومعرف جدول البيانات', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch('/verify_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sheet_name: sheetName,
+                        spreadsheet_id: spreadsheetId
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    // عرض تفاصيل الجدول
+                    document.getElementById('sheetDetails').classList.remove('hidden');
+                    
+                    // ملء قائمة أوراق العمل
+                    const worksheetSelect = document.getElementById('newWorksheetName');
+                    worksheetSelect.innerHTML = '';
+                    data.sheets.forEach(sheet => {
+                        const option = document.createElement('option');
+                        option.value = sheet;
+                        option.textContent = sheet;
+                        worksheetSelect.appendChild(option);
+                    });
+                    
+                    // عرض الأعمدة المكتشفة
+                    const columnsDiv = document.getElementById('discoveredColumns');
+                    if (data.columns.length > 0) {
+                        columnsDiv.innerHTML = data.columns.join('، ');
+                    } else {
+                        columnsDiv.innerHTML = 'لم يتم العثور على أعمدة';
+                    }
+                    
+                    // تفعيل زر الإضافة
+                    document.getElementById('addSheetBtn').disabled = false;
+                    
+                    showToast('تم التحقق من الجدول بنجاح');
+                } else {
+                    showToast(data.message, true);
+                }
+            } catch (error) {
+                showToast('حدث خطأ أثناء التحقق من الجدول', true);
+                console.error('Error:', error);
+            }
+        }
+
+        // إضافة جدول جديد
+        async function addNewSheet() {
+            const sheetName = document.getElementById('newSheetName').value.trim();
+            const spreadsheetId = document.getElementById('newSpreadsheetId').value.trim();
+            const worksheetName = document.getElementById('newWorksheetName').value;
+            
+            if (!sheetName || !spreadsheetId || !worksheetName) {
+                showToast('يرجى ملء جميع الحقول المطلوبة', true);
+                return;
+            }
+            
+            try {
+                const response = await fetch('/add_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sheet_name: sheetName,
+                        worksheet_name: worksheetName,
+                        spreadsheet_id: spreadsheetId
+                    })
+                });
+                
+                const data = await response.json();
+                if (data.status === 'success') {
+                    showToast(data.message);
+                    hideAddSheetModal();
+                    
+                    // إضافة الجدول الجديد للقائمة
+                    const select = document.getElementById('sheetSelect');
+                    const option = document.createElement('option');
+                    option.value = sheetName;
+                    option.textContent = sheetName;
+                    select.appendChild(option);
+                    select.value = sheetName;
+                    
+                    // إذا كان هناك أعمدة، قم بإضافتها تلقائياً
+                    if (data.columns && data.columns.length > 0) {
+                        const columnsDiv = document.getElementById('columns');
+                        columnsDiv.innerHTML = '';
+                        data.columns.forEach(column => {
+                            columnsDiv.appendChild(createColumnInput(column));
+                        });
+                    }
+                    
+                    // تحديث الواجهة
+                    loadSheetConfig(sheetName);
+                } else {
+                    showToast(data.message, true);
+                }
+            } catch (error) {
+                showToast('حدث خطأ أثناء إضافة الجدول', true);
+                console.error('Error:', error);
+            }
+        }
+
+        // حذف الجدول الحالي
+        async function deleteCurrentSheet() {
+            const sheetName = document.getElementById('sheetSelect').value;
+            
+            if (!confirm(`هل أنت متأكد من حذف الجدول "${sheetName}"؟`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete_sheet/${encodeURIComponent(sheetName)}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    showToast(data.message);
+                    location.reload(); // تحديث الصفحة بعد الحذف
+                } else {
+                    showToast(data.message, true);
+                }
+            } catch (error) {
+                showToast('حدث خطأ أثناء حذف الجدول', true);
+            }
+        }
+
+        // إضافة معرف مستخدم
+        function createUserIdInput(value = '') {
+            const div = document.createElement('div');
+            div.className = 'flex items-center space-x-2 space-x-reverse';
+            div.innerHTML = `
+                <input type="text" value="${value}" class="custom-input flex-1 ltr py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="أدخل معرف المستخدم">
+                <button onclick="this.parentElement.remove()" class="inline-flex items-center p-2 border border-transparent rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors duration-200">
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            `;
+            return div;
+        }
+
+        function addUserId() {
+            const userIdsContainer = document.getElementById('userIds');
+            userIdsContainer.appendChild(createUserIdInput());
+        }
+
+        // إضافة عمود
+        function createColumnInput(name = '', type = 'text', dateOptions = null) {
+            const div = document.createElement('div');
+            div.className = 'flex items-center space-x-4 space-x-reverse bg-gray-700 bg-opacity-50 p-4 rounded-lg';
+            div.innerHTML = `
+                <div class="flex-1">
+                    <input type="text" value="${name}" class="custom-input w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="اسم العمود">
+                </div>
+                <div class="w-40">
+                    <select class="custom-select w-full py-2 px-3 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="toggleDateOptions(this)">
+                        <option value="text" ${type === 'text' ? 'selected' : ''}>نص</option>
+                        <option value="number" ${type === 'number' ? 'selected' : ''}>رقم</option>
+                        <option value="date" ${type === 'date' ? 'selected' : ''}>تاريخ</option>
+                    </select>
+                </div>
+                <div class="date-options ${type === 'date' ? '' : 'hidden'} space-y-2 text-gray-300">
+                    <label class="flex items-center">
+                        <input type="checkbox" class="ml-2 text-blue-600" ${dateOptions?.auto ? 'checked' : ''}>
+                        تلقائي
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" class="ml-2 text-blue-600" ${dateOptions?.include_time ? 'checked' : ''}>
+                        تضمين الوقت
+                    </label>
+                </div>
+                <button onclick="this.parentElement.remove()" class="inline-flex items-center p-2 border border-transparent rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors duration-200">
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            `;
+            return div;
+        }
+
+        function addColumn() {
+            const columnsContainer = document.getElementById('columns');
+            columnsContainer.appendChild(createColumnInput());
+        }
+
+        function toggleDateOptions(select) {
+            const dateOptions = select.parentElement.nextElementSibling;
+            dateOptions.classList.toggle('hidden', select.value !== 'date');
+        }
+
+        // تحميل إعدادات الجدول
+        async function loadSheetConfig(sheetName) {
+            try {
+                const response = await fetch(`/get_sheet_config/${encodeURIComponent(sheetName)}`);
+                const config = await response.json();
+                
+                // تحديث اسم ورقة العمل
+                document.getElementById('worksheetName').value = config.worksheet_name;
+                
+                // تحديث المعرفات
+                const userIdsContainer = document.getElementById('userIds');
+                userIdsContainer.innerHTML = '';
+                if (config.authorized_user_id) {
+                    userIdsContainer.appendChild(createUserIdInput(config.authorized_user_id));
+                }
+                (config.authorized_user_ids || []).forEach(userId => {
+                    userIdsContainer.appendChild(createUserIdInput(userId));
+                });
+                
+                // تحديث الأعمدة
+                const columnsContainer = document.getElementById('columns');
+                columnsContainer.innerHTML = '';
+                config.column_order.forEach(columnName => {
+                    const type = config.column_types[columnName];
+                    const dateOptions = type === 'date' ? config.date_options[columnName] : null;
+                    columnsContainer.appendChild(createColumnInput(columnName, type, dateOptions));
+                });
+                
+            } catch (error) {
+                showToast('حدث خطأ أثناء تحميل إعدادات الجدول', true);
+            }
+        }
+
+        // حفظ التغييرات
+        async function saveChanges() {
+            const sheetName = document.getElementById('sheetSelect').value;
+            const worksheetName = document.getElementById('worksheetName').value;
+            
+            // جمع المعرفات
+            const userIds = Array.from(document.querySelectorAll('#userIds input')).map(input => input.value.trim()).filter(id => id);
+            
+            // جمع الأعمدة
+            const columns = document.querySelectorAll('#columns > div');
+            const columnTypes = {};
+            const columnOrder = [];
+            const dateOptions = {};
+            
+            columns.forEach(column => {
+                const inputs = column.querySelectorAll('input, select');
+                const name = inputs[0].value.trim();
+                const type = inputs[1].value;
+                
+                if (name) {
+                    columnOrder.push(name);
+                    columnTypes[name] = type;
+                    
+                    if (type === 'date') {
+                        const dateOptionsDiv = column.querySelector('.date-options');
+                        const checkboxes = dateOptionsDiv.querySelectorAll('input[type="checkbox"]');
+                        dateOptions[name] = {
+                            auto: checkboxes[0].checked,
+                            include_time: checkboxes[1].checked,
+                            format: checkboxes[1].checked ? 'date_time' : 'date_only'
+                        };
+                    }
+                }
+            });
+
+            try {
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sheet_name: sheetName,
+                        worksheet_name: worksheetName,
+                        authorized_user_ids: userIds,
+                        column_types: columnTypes,
+                        column_order: columnOrder,
+                        date_options: dateOptions
+                    })
+                });
+
+                const data = await response.json();
+                showToast(data.message, data.status !== 'success');
+                
+                if (data.status === 'success') {
+                    // تحديث الكونفيج المحلي
+                    config[sheetName] = {
+                        worksheet_name: worksheetName,
+                        authorized_user_id: userIds[0],
+                        authorized_user_ids: userIds.slice(1),
+                        column_types: columnTypes,
+                        column_order: columnOrder,
+                        date_options: dateOptions
+                    };
+                }
+            } catch (error) {
+                showToast('حدث خطأ أثناء حفظ التغييرات', true);
+            }
+        }
+
+        // عرض الإشعارات
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toast.firstElementChild.className = `${isError ? 'bg-red-600' : 'bg-green-600'} text-white px-6 py-3 rounded-lg shadow-xl`;
+            toastMessage.textContent = message;
+            
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // تحميل إعدادات الجدول عند تغيير الاختيار
+        document.getElementById('sheetSelect').addEventListener('change', (e) => {
+            loadSheetConfig(e.target.value);
+        });
+
+        // تحميل إعدادات الجدول الأول عند تحميل الصفحة
+        document.addEventListener('DOMContentLoaded', () => {
+            const sheetSelect = document.getElementById('sheetSelect');
+            if (sheetSelect.value) {
+                loadSheetConfig(sheetSelect.value);
+            }
+        });
+    </script>
+</body>
+</html>
