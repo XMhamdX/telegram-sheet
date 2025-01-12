@@ -12,17 +12,13 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # إعداد السجلات
 logging.basicConfig(
-    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot_debug.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
+    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 # حالات المحادثة
-CHOOSING_SHEET, ENTERING_COLUMNS = range(2)
+CHOOSING_SHEET, ENTERING_DATA = range(2)
 
 async def load_sheets_config() -> dict:
     """تحميل إعدادات الجداول من الملف"""
@@ -244,46 +240,114 @@ async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def request_next_column(update_or_query, context):
     """طلب إدخال العمود التالي"""
-    if not context.user_data['remaining_columns']:
-        # تم إدخال جميع الأعمدة، حفظ البيانات
-        return await save_data(update_or_query, context)
-    
-    current_column = context.user_data['remaining_columns'][0]
-    sheet_config = context.user_data['current_sheet']
-    
-    # التحقق مما إذا كان العمود اختياري
-    is_optional = current_column in sheet_config.get('optional_columns', [])
-    skip_text = "\nأرسل /skip للتخطي" if is_optional else ""
-    
-    message_text = f"الرجاء إدخال قيمة {current_column}{skip_text}"
-    
-    # التحقق من نوع التحديث (رسالة جديدة أو تعديل رسالة موجودة)
-    if hasattr(update_or_query, 'message'):
-        await update_or_query.message.reply_text(message_text)
-    else:
-        await update_or_query.edit_message_text(message_text)
-    
-    return ENTERING_COLUMNS
+    try:
+        if not context.user_data.get('remaining_columns'):
+            # تم إدخال جميع الأعمدة، حفظ البيانات
+            logger.info("تم إدخال جميع الأعمدة، جاري حفظ البيانات")
+            return await save_data(update_or_query, context)
+        
+        current_column = context.user_data['remaining_columns'][0]
+        sheet_config = context.user_data.get('current_sheet')
+        
+        if not sheet_config:
+            error_msg = "❌ عذراً، لم يتم العثور على معلومات الجدول.\nالرجاء استخدام /start للبدء من جديد."
+            logger.error("لم يتم العثور على معلومات الجدول في request_next_column")
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text(error_msg)
+            else:
+                await update_or_query.edit_message_text(error_msg)
+            return ConversationHandler.END
+        
+        # التحقق مما إذا كان العمود اختياري
+        is_optional = current_column in sheet_config.get('optional_columns', [])
+        skip_text = "\nأرسل /skip للتخطي" if is_optional else ""
+        
+        message_text = f"الرجاء إدخال قيمة {current_column}{skip_text}"
+        logger.info(f"طلب إدخال قيمة للعمود: {current_column} (اختياري: {is_optional})")
+        
+        # التحقق من نوع التحديث (رسالة جديدة أو تعديل رسالة موجودة)
+        try:
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text(message_text)
+            else:
+                await update_or_query.edit_message_text(message_text)
+        except Exception as e:
+            logger.error(f"خطأ في إرسال رسالة طلب العمود التالي: {str(e)}")
+            # محاولة إرسال رسالة جديدة في حالة فشل تعديل الرسالة
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text(message_text)
+            else:
+                await update_or_query.message.reply_text(message_text)
+        
+        return ENTERING_DATA
+        
+    except Exception as e:
+        logger.error(f"خطأ في طلب العمود التالي: {str(e)}", exc_info=True)
+        error_msg = "❌ عذراً، حدث خطأ أثناء طلب العمود التالي.\nالرجاء استخدام /start للبدء من جديد."
+        if hasattr(update_or_query, 'message'):
+            await update_or_query.message.reply_text(error_msg)
+        else:
+            try:
+                await update_or_query.edit_message_text(error_msg)
+            except:
+                await update_or_query.message.reply_text(error_msg)
+        return ConversationHandler.END
 
 async def handle_column_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """معالجة إدخال قيمة العمود"""
     try:
+        # التحقق من وجود البيانات المطلوبة في السياق
+        if not all(key in context.user_data for key in ['remaining_columns', 'current_sheet']):
+            logger.error("بيانات السياق مفقودة في handle_column_input")
+            await update.message.reply_text(
+                "❌ عذراً، حدث خطأ في معالجة البيانات.\n"
+                "الرجاء استخدام /start للبدء من جديد."
+            )
+            return ConversationHandler.END
+
+        if not context.user_data['remaining_columns']:
+            logger.error("قائمة الأعمدة المتبقية فارغة في handle_column_input")
+            await update.message.reply_text(
+                "❌ عذراً، لا توجد أعمدة متبقية لإدخال البيانات.\n"
+                "الرجاء استخدام /start للبدء من جديد."
+            )
+            return ConversationHandler.END
+
         current_column = context.user_data['remaining_columns'][0]
         sheet_config = context.user_data['current_sheet']
         
         # حفظ القيمة المدخلة
-        context.user_data['current_data'][current_column] = update.message.text
+        input_value = update.message.text.strip()
+        logger.info(f"تم استلام قيمة للعمود {current_column}: {input_value}")
+        
+        # التحقق من القيمة المدخلة
+        if not input_value:
+            logger.warning(f"تم إدخال قيمة فارغة للعمود {current_column}")
+            await update.message.reply_text(
+                f"⚠️ لا يمكن أن تكون قيمة {current_column} فارغة.\n"
+                "الرجاء إدخال قيمة صحيحة."
+            )
+            return ENTERING_DATA
+
+        # تهيئة قاموس البيانات إذا لم يكن موجوداً
+        if 'current_data' not in context.user_data:
+            context.user_data['current_data'] = {}
+        
+        # حفظ القيمة وإزالة العمود من القائمة
+        context.user_data['current_data'][current_column] = input_value
         context.user_data['remaining_columns'].pop(0)
+        logger.info(f"تم حفظ القيمة بنجاح للعمود {current_column}")
         
         # طلب العمود التالي
         return await request_next_column(update, context)
+        
     except Exception as e:
         logger.error(f"خطأ في معالجة إدخال العمود: {str(e)}", exc_info=True)
         await update.message.reply_text(
             "❌ عذراً، حدث خطأ أثناء معالجة القيمة المدخلة.\n"
             "الرجاء المحاولة مرة أخرى."
         )
-        return ENTERING_COLUMNS
+        return ENTERING_DATA
 
 async def skip_column(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """تخطي عمود اختياري"""
@@ -293,7 +357,7 @@ async def skip_column(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if current_column not in sheet_config.get('optional_columns', []):
             await update.message.reply_text("لا يمكن تخطي هذا العمود لأنه إلزامي.")
-            return ENTERING_COLUMNS
+            return ENTERING_DATA
         
         # تخطي العمود الحالي
         context.user_data['current_data'][current_column] = ''
@@ -308,7 +372,7 @@ async def skip_column(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ عذراً، حدث خطأ أثناء محاولة تخطي العمود.\n"
             "الرجاء المحاولة مرة أخرى."
         )
-        return ENTERING_COLUMNS
+        return ENTERING_DATA
 
 async def save_data(update_or_query, context):
     """حفظ البيانات في Google Sheets"""
@@ -460,37 +524,75 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.error(f"خطأ في معالج الأخطاء: {e}")
 
-def main():
+async def main():
     """تشغيل البوت"""
-    # إنشاء التطبيق
-    application = Application.builder().token(config.TELEGRAM_TOKEN).build()
-    
-    # إضافة معالج الأخطاء
-    application.add_error_handler(error_handler)
-    
-    # إنشاء محادثة
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            CHOOSING_SHEET: [
-                CallbackQueryHandler(handle_sheet_choice, pattern='^sheet_.*$'),
-                CallbackQueryHandler(show_all_sheets, pattern='^show_all_sheets$')
+    try:
+        # إعداد السجلات
+        logging.basicConfig(
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            level=logging.INFO
+        )
+        logger.info("بدء تشغيل البوت...")
+        
+        # تحميل إعدادات الجداول
+        await load_sheets_config()
+        
+        # إنشاء التطبيق
+        application = Application.builder().token(config.TELEGRAM_TOKEN).build()
+        
+        # إضافة معالج المحادثة
+        conv_handler = ConversationHandler(
+            entry_points=[CommandHandler('start', start)],
+            states={
+                CHOOSING_SHEET: [
+                    CallbackQueryHandler(handle_sheet_choice, pattern='^sheet_.*$'),
+                    CallbackQueryHandler(show_all_sheets, pattern='^show_all_sheets$')
+                ],
+                ENTERING_DATA: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_column_input),
+                    CommandHandler('skip', skip_column),
+                    CommandHandler('cancel', cancel)
+                ]
+            },
+            fallbacks=[
+                CommandHandler('cancel', cancel),
+                MessageHandler(filters.COMMAND, cancel)
             ],
-            ENTERING_COLUMNS: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_column_input),
-                CommandHandler('skip', skip_column)
-            ]
-        },
-        fallbacks=[CommandHandler('cancel', cancel)]
-    )
-    
-    application.add_handler(conv_handler)
-    
-    # تشغيل البوت
-    logger.info("بدء تشغيل البوت...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+            per_message=False
+        )
+        
+        application.add_handler(conv_handler)
+        application.add_error_handler(error_handler)
+        
+        # بدء البوت
+        logger.info("جاري بدء البوت...")
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        
+        # الانتظار إلى ما لا نهاية
+        stop_signal = asyncio.Event()
+        await stop_signal.wait()
+        
+    except Exception as e:
+        logger.error(f"خطأ في تشغيل البوت: {str(e)}", exc_info=True)
+        sys.exit(1)
+    finally:
+        # إيقاف البوت
+        await application.updater.stop()
+        await application.stop()
 
 if __name__ == '__main__':
+    # تشغيل البوت
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    main()
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        logger.info("تم إيقاف البوت بواسطة المستخدم")
+    except Exception as e:
+        logger.error(f"خطأ غير متوقع: {str(e)}", exc_info=True)
+    finally:
+        loop.close()
