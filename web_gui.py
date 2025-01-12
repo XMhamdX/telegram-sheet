@@ -1,129 +1,15 @@
 from flask import Flask, render_template, request, jsonify
 import json
 import os
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-import asyncio
-from telegram import Bot
-import config
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+from googleapiclient.errors import HttpError
 
 app = Flask(__name__)
 
-# تهيئة Google Sheets
-SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/drive.file'
-]
-CREDENTIALS_FILE = 'credentials.json'
-
-# إنشاء كائن البوت
-bot = Bot(token=config.TELEGRAM_TOKEN)
-
-def get_gspread_client():
-    """إنشاء اتصال مع Google Sheets"""
-    try:
-        if not os.path.exists(CREDENTIALS_FILE):
-            print(f"خطأ: ملف الاعتماد '{CREDENTIALS_FILE}' غير موجود")
-            return None, "ملف الاعتماد (credentials.json) غير موجود. يرجى التأكد من وجود الملف في المجلد الصحيح"
-        
-        try:
-            client = gspread.service_account(filename=CREDENTIALS_FILE)
-            return client, None
-        except ValueError as e:
-            error_msg = str(e)
-            if "No private key" in error_msg:
-                return None, "ملف الاعتماد غير صالح: المفتاح الخاص مفقود"
-            elif "No client email" in error_msg:
-                return None, "ملف الاعتماد غير صالح: البريد الإلكتروني للحساب مفقود"
-            else:
-                return None, f"ملف الاعتماد غير صالح: {error_msg}"
-                
-    except Exception as e:
-        error_msg = str(e)
-        if "invalid_grant" in error_msg:
-            return None, "فشل التوثيق: تأكد من تفعيل Google Sheets API وصلاحية ملف الاعتماد"
-        elif "invalid_client" in error_msg:
-            return None, "خطأ في حساب الخدمة: تأكد من إعداد المشروع بشكل صحيح في Google Cloud Console"
-        else:
-            return None, f"خطأ في الاتصال بـ Google Sheets: {error_msg}"
-
-def verify_sheet_exists(sheet_name):
-    """التحقق من وجود الجدول"""
-    try:
-        gc, error = get_gspread_client()
-        if error:
-            return None, error
-        
-        try:
-            gc.open(sheet_name)
-            return True, None
-        except gspread.exceptions.SpreadsheetNotFound:
-            return False, f"لم يتم العثور على جدول باسم '{sheet_name}'. تأكد من:\n1. كتابة اسم الجدول بشكل صحيح\n2. مشاركة الجدول مع حساب الخدمة: {gc.auth.service_account_email}"
-        except gspread.exceptions.APIError as e:
-            error_msg = str(e)
-            if "PERMISSION_DENIED" in error_msg:
-                return None, f"تم رفض الوصول للجدول. تأكد من مشاركة الجدول مع حساب الخدمة: {gc.auth.service_account_email}"
-            elif "RESOURCE_EXHAUSTED" in error_msg:
-                return None, "تم تجاوز حد الطلبات المسموح به. حاول مرة أخرى بعد قليل"
-            else:
-                return None, f"خطأ في API من Google Sheets: {error_msg}"
-        
-    except Exception as e:
-        return None, f"خطأ غير متوقع: {str(e)}"
-
-def get_worksheet_names(sheet_name):
-    """الحصول على قائمة أسماء الصفحات في الجدول"""
-    try:
-        gc, error = get_gspread_client()
-        if error:
-            return None, error
-        
-        try:
-            spreadsheet = gc.open(sheet_name)
-            worksheets = spreadsheet.worksheets()
-            if not worksheets:
-                return None, "الجدول لا يحتوي على أي أوراق عمل"
-            return [worksheet.title for worksheet in worksheets], None
-        except gspread.exceptions.SpreadsheetNotFound:
-            return None, f"لم يتم العثور على جدول باسم '{sheet_name}'"
-        except gspread.exceptions.APIError as e:
-            error_msg = str(e)
-            if "PERMISSION_DENIED" in error_msg:
-                return None, "تم رفض الوصول للجدول. تأكد من الصلاحيات"
-            else:
-                return None, f"خطأ في API من Google Sheets: {error_msg}"
-            
-    except Exception as e:
-        return None, f"خطأ غير متوقع: {str(e)}"
-
-def get_sheet_columns(sheet_name, worksheet_name):
-    """الحصول على أسماء الأعمدة في الصفحة"""
-    try:
-        gc, error = get_gspread_client()
-        if error:
-            return None, error
-        
-        try:
-            spreadsheet = gc.open(sheet_name)
-            worksheet = spreadsheet.worksheet(worksheet_name)
-            columns = worksheet.row_values(1)
-            if not columns:
-                return None, "الصف الأول في ورقة العمل فارغ. يجب أن يحتوي على أسماء الأعمدة"
-            return columns, None
-        except gspread.exceptions.SpreadsheetNotFound:
-            return None, f"لم يتم العثور على جدول باسم '{sheet_name}'"
-        except gspread.exceptions.WorksheetNotFound:
-            return None, f"لم يتم العثور على ورقة العمل '{worksheet_name}'"
-        except gspread.exceptions.APIError as e:
-            error_msg = str(e)
-            if "PERMISSION_DENIED" in error_msg:
-                return None, "تم رفض الوصول للجدول. تأكد من الصلاحيات"
-            else:
-                return None, f"خطأ في API من Google Sheets: {error_msg}"
-            
-    except Exception as e:
-        return None, f"خطأ غير متوقع: {str(e)}"
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 def load_config():
     try:
@@ -142,175 +28,79 @@ def save_config(config):
         print(f"Error saving config: {e}")
         return False
 
-async def notify_users(old_config, new_config, sheet_name):
-    """إشعار المستخدمين عند إضافتهم أو حذفهم من الجدول"""
-    old_users = set(old_config.get(sheet_name, {}).get('authorized_user_ids', []))
-    new_users = set(new_config.get(sheet_name, {}).get('authorized_user_ids', []))
-    
-    # المستخدمون الجدد
-    added_users = new_users - old_users
-    # المستخدمون المحذوفون
-    removed_users = old_users - new_users
-    
-    # إرسال إشعارات للمستخدمين الجدد
-    for user_id in added_users:
-        try:
-            await bot.send_message(
-                chat_id=user_id,
-                text=f"تمت إضافتك إلى جدول '{sheet_name}'. أرسل /start لعرض الجداول المتاحة لك."
-            )
-        except Exception as e:
-            print(f"خطأ في إرسال إشعار للمستخدم {user_id}: {str(e)}")
-    
-    # إرسال إشعارات للمستخدمين المحذوفين
-    for user_id in removed_users:
-        try:
-            await bot.send_message(
-                chat_id=user_id,
-                text=f"تم إلغاء وصولك إلى جدول '{sheet_name}'."
-            )
-        except Exception as e:
-            print(f"خطأ في إرسال إشعار للمستخدم {user_id}: {str(e)}")
+def get_sheets_service():
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+        service = build('sheets', 'v4', credentials=credentials)
+        return service
+    except Exception as e:
+        print(f"Error getting sheets service: {e}")
+        return None
+
+def get_spreadsheet_metadata(spreadsheet_id):
+    try:
+        print(f"\n=== بداية جلب معلومات الجدول ===")
+        print(f"معرف الجدول: {spreadsheet_id}")
+        
+        service = get_sheets_service()
+        if not service:
+            print("فشل في الحصول على خدمة Sheets")
+            return None, None
+
+        # جلب معلومات الجدول
+        print("جلب معلومات الجدول...")
+        spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        
+        # جلب قائمة أوراق العمل
+        sheets = spreadsheet.get('sheets', [])
+        sheet_names = [sheet['properties']['title'] for sheet in sheets]
+        
+        print(f"تم العثور على الجدول: {spreadsheet['properties']['title']}")
+        print(f"أوراق العمل: {sheet_names}")
+        
+        return spreadsheet['properties']['title'], sheet_names
+        
+    except HttpError as e:
+        print(f"خطأ HTTP: {e.resp.status} - {str(e)}")
+        if e.resp.status == 404:
+            return None, None
+        raise
+    except Exception as e:
+        print(f"خطأ غير متوقع: {str(e)}")
+        return None, None
+    finally:
+        print("=== نهاية جلب معلومات الجدول ===\n")
+
+def get_sheet_columns(spreadsheet_id, worksheet_name):
+    try:
+        print(f"\n=== بداية جلب الأعمدة ===")
+        print(f"جلب أعمدة الورقة: {worksheet_name}")
+        
+        service = get_sheets_service()
+        if not service:
+            print("فشل في الحصول على خدمة Sheets")
+            return None
+
+        range_name = f"{worksheet_name}!1:1"
+        result = service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id, range=range_name).execute()
+        values = result.get('values', [])
+        
+        columns = values[0] if values else []
+        print(f"تم العثور على الأعمدة: {columns}")
+        return columns
+        
+    except Exception as e:
+        print(f"خطأ في جلب الأعمدة: {str(e)}")
+        return None
+    finally:
+        print("=== نهاية جلب الأعمدة ===\n")
 
 @app.route('/')
 def index():
     config = load_config()
     return render_template('index.html', config=config)
-
-@app.route('/verify_sheet', methods=['POST'])
-def verify_sheet():
-    try:
-        data = request.get_json()
-        sheet_name = data['sheet_name']
-        
-        # التحقق من عدم وجود الجدول في الإعدادات
-        config = load_config()
-        if sheet_name in config:
-            return jsonify({
-                "status": "error",
-                "message": "الجدول موجود بالفعل في الإعدادات"
-            }), 400
-        
-        # التحقق من وجود الجدول في Google Sheets
-        exists, error = verify_sheet_exists(sheet_name)
-        if error:
-            return jsonify({
-                "status": "error",
-                "message": error,
-                "details": {
-                    "type": "auth_error" if "ملف الاعتماد" in error or "فشل التوثيق" in error else "access_error",
-                    "credentials_file_exists": os.path.exists(CREDENTIALS_FILE)
-                }
-            }), 500 if exists is None else 404
-            
-        # جلب قائمة أوراق العمل
-        sheets, error = get_worksheet_names(sheet_name)
-        if error:
-            return jsonify({
-                "status": "error",
-                "message": error
-            }), 500
-            
-        # جلب أسماء الأعمدة من الورقة الأولى
-        first_sheet = sheets[0] if sheets else None
-        if first_sheet:
-            columns, error = get_sheet_columns(sheet_name, first_sheet)
-            if error:
-                return jsonify({
-                    "status": "error",
-                    "message": error
-                }), 500
-        else:
-            columns = []
-            
-        return jsonify({
-            "status": "success",
-            "sheets": sheets,
-            "columns": columns
-        })
-        
-    except KeyError:
-        return jsonify({
-            "status": "error",
-            "message": "البيانات المرسلة غير مكتملة"
-        }), 400
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"خطأ غير متوقع: {str(e)}"
-        }), 500
-
-@app.route('/add_sheet', methods=['POST'])
-def add_sheet():
-    try:
-        data = request.get_json()
-        sheet_name = data.get('sheet_name')
-        worksheet_name = data.get('worksheet_name')
-        column_types = data.get('column_types', {})
-        required_columns = data.get('required_columns', [])
-        
-        if not sheet_name or not worksheet_name:
-            return jsonify({
-                "status": "error",
-                "message": "البيانات المرسلة غير مكتملة"
-            }), 400
-            
-        # التحقق من عدم وجود الجدول في الإعدادات
-        config = load_config()
-        if sheet_name in config:
-            return jsonify({
-                "status": "error",
-                "message": "الجدول موجود بالفعل في الإعدادات"
-            }), 400
-            
-        # جلب أسماء الأعمدة
-        columns, error = get_sheet_columns(sheet_name, worksheet_name)
-        if error:
-            return jsonify({
-                "status": "error",
-                "message": error
-            }), 500
-            
-        if not columns:
-            columns = []
-            
-        # إنشاء إعدادات الجدول
-        sheet_config = {
-            "sheet_name": sheet_name,
-            "worksheet_name": worksheet_name,
-            "authorized_user_id": "",
-            "authorized_user_ids": [],
-            "column_types": column_types or {},
-            "column_order": columns,
-            "date_options": {},
-            "required_columns": required_columns or [],  # قائمة الحقول الإجبارية
-            "optional_columns": [col for col in columns if col not in required_columns]  # قائمة الحقول الاختيارية
-        }
-        
-        # تعيين النوع الافتراضي لكل عمود كنص إذا لم يتم تحديده
-        for column in columns:
-            if column not in sheet_config["column_types"]:
-                sheet_config["column_types"][column] = "text"
-            
-        # حفظ الإعدادات
-        config[sheet_name] = sheet_config
-        if save_config(config):
-            return jsonify({
-                "status": "success",
-                "message": "تم إضافة الجدول بنجاح",
-                "config": sheet_config
-            })
-        else:
-            return jsonify({
-                "status": "error",
-                "message": "حدث خطأ أثناء حفظ الإعدادات"
-            }), 500
-            
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": f"خطأ غير متوقع: {str(e)}"
-        }), 500
 
 @app.route('/get_sheet_config/<sheet_name>')
 def get_sheet_config(sheet_name):
@@ -323,74 +113,81 @@ def get_sheet_config(sheet_name):
 def save():
     try:
         data = request.get_json()
-        sheet_name = data.get('sheet_name')
+        config = load_config()
+        sheet_name = data['sheet_name']
         
-        if not sheet_name:
-            return jsonify({'success': False, 'error': 'لم يتم تحديد اسم الجدول'})
-        
-        # قراءة الإعدادات الحالية
-        with open('sheets_config.json', 'r', encoding='utf-8') as f:
-            old_config = json.load(f)
-        
-        # نسخة من الإعدادات القديمة
-        new_config = old_config.copy()
-        
-        # تحديث إعدادات الجدول
-        if sheet_name in new_config:
-            new_config[sheet_name].update({
-                'worksheet_name': data.get('worksheet_name', 'Sheet1'),
-                'authorized_user_ids': data.get('authorized_user_ids', []),
-                'column_types': data.get('column_types', {}),
-                'column_order': data.get('column_order', []),
-                'date_options': data.get('date_options', {}),
-                'required_columns': data.get('required_columns', []),
-                'optional_columns': data.get('optional_columns', [])
+        if sheet_name in config:
+            # تحديث الإعدادات الأساسية
+            config[sheet_name].update({
+                'sheet_name': sheet_name,
+                'worksheet_name': data['worksheet_name'],
+                'authorized_user_id': data['authorized_user_ids'][0],
+                'authorized_user_ids': data['authorized_user_ids'][1:],
+                'column_types': data['column_types'],
+                'column_order': data['column_order'],
+                'date_options': data['date_options']
             })
             
-            # حفظ الإعدادات
-            with open('sheets_config.json', 'w', encoding='utf-8') as f:
-                json.dump(new_config, f, ensure_ascii=False, indent=4)
-            
-            # إشعار المستخدمين بالتغييرات
-            asyncio.run(notify_users(old_config, new_config, sheet_name))
-            
-            return jsonify({'success': True, 'config': new_config})
+            if save_config(config):
+                return jsonify({"status": "success", "message": "تم حفظ التغييرات بنجاح"})
+            else:
+                return jsonify({"status": "error", "message": "حدث خطأ أثناء حفظ التغييرات"}), 500
         else:
-            return jsonify({'success': False, 'error': 'الجدول غير موجود'})
+            return jsonify({"status": "error", "message": "الجدول غير موجود"}), 404
             
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/delete_sheet', methods=['POST'])
-def delete_sheet():
+@app.route('/add_sheet', methods=['POST'])
+def add_sheet():
     try:
         data = request.get_json()
-        sheet_name = data.get('sheet_name')
+        config = load_config()
+        sheet_name = data['sheet_name']
+        worksheet_name = data['worksheet_name']
+        spreadsheet_id = data.get('spreadsheet_id')
         
-        if not sheet_name:
-            return jsonify({'success': False, 'error': 'لم يتم تحديد اسم الجدول'})
-        
-        # قراءة الإعدادات الحالية
-        with open('sheets_config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        
-        # حذف الجدول من الإعدادات
         if sheet_name in config:
-            del config[sheet_name]
-            
-            # حفظ الإعدادات
-            with open('sheets_config.json', 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=4)
-            
-            return jsonify({'success': True, 'config': config})
+            return jsonify({"status": "error", "message": "الجدول موجود بالفعل"}), 400
+        
+        # جلب أسماء الأعمدة من Google Sheets
+        if spreadsheet_id:
+            columns = get_sheet_columns(spreadsheet_id, worksheet_name)
+            if columns is None:
+                return jsonify({"status": "error", "message": "حدث خطأ أثناء جلب أسماء الأعمدة"}), 500
+                
+            # إنشاء column_types تلقائياً (نوع نص افتراضي)
+            column_types = {col: "text" for col in columns}
+            column_order = columns
         else:
-            return jsonify({'success': False, 'error': 'الجدول غير موجود'})
+            column_types = {}
+            column_order = []
+            
+        config[sheet_name] = {
+            'sheet_name': sheet_name,
+            'worksheet_name': worksheet_name,
+            'spreadsheet_id': spreadsheet_id,
+            'authorized_user_id': '',
+            'authorized_user_ids': [],
+            'column_types': column_types,
+            'column_order': column_order,
+            'date_options': {}
+        }
+        
+        if save_config(config):
+            return jsonify({
+                "status": "success", 
+                "message": "تم إضافة الجدول بنجاح",
+                "columns": column_order
+            })
+        else:
+            return jsonify({"status": "error", "message": "حدث خطأ أثناء إضافة الجدول"}), 500
             
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/delete_sheet/<sheet_name>', methods=['DELETE'])
-def delete_sheet_by_name(sheet_name):
+def delete_sheet(sheet_name):
     try:
         config = load_config()
         if sheet_name in config:
@@ -403,10 +200,76 @@ def delete_sheet_by_name(sheet_name):
             return jsonify({"status": "error", "message": "الجدول غير موجود"}), 404
             
     except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/verify_sheet', methods=['POST'])
+def verify_sheet():
+    try:
+        data = request.get_json()
+        sheet_name = data['sheet_name']
+        spreadsheet_id = data['spreadsheet_id']
+        
+        print(f"\n=== بداية التحقق من الجدول ===")
+        print(f"اسم الجدول: {sheet_name}")
+        print(f"معرف الجدول: {spreadsheet_id}")
+        
+        # التحقق من عدم وجود الجدول في الإعدادات
+        config = load_config()
+        if sheet_name in config:
+            print("الجدول موجود بالفعل في الإعدادات")
+            return jsonify({
+                "status": "error",
+                "message": "الجدول موجود بالفعل في الإعدادات"
+            }), 400
+        
+        # التحقق من وجود الجدول في Google Sheets وجلب معلوماته
+        service = get_sheets_service()
+        if not service:
+            return jsonify({
+                "status": "error",
+                "message": "فشل في الاتصال بخدمة Google Sheets"
+            }), 500
+
+        try:
+            # محاولة الوصول للجدول
+            spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+            sheets = spreadsheet.get('sheets', [])
+            sheet_names = [sheet['properties']['title'] for sheet in sheets]
+            
+            if not sheet_names:
+                return jsonify({
+                    "status": "error",
+                    "message": "الجدول فارغ - لا يحتوي على أي ورقة عمل"
+                }), 400
+
+            # جلب أسماء الأعمدة من الورقة الأولى
+            first_sheet = sheet_names[0]
+            range_name = f"{first_sheet}!1:1"
+            result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id, range=range_name).execute()
+            columns = result.get('values', [[]])[0]
+
+            return jsonify({
+                "status": "success",
+                "sheets": sheet_names,
+                "columns": columns
+            })
+
+        except Exception as e:
+            print(f"خطأ في الوصول للجدول: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "message": "لم يتم العثور على الجدول. تأكد من المعرف وصلاحيات الوصول"
+            }), 404
+            
+    except Exception as e:
+        print(f"خطأ غير متوقع: {str(e)}")
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 500
+    finally:
+        print("=== نهاية التحقق من الجدول ===\n")
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

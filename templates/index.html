@@ -4,16 +4,70 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>إدارة جداول البيانات</title>
+    
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <style>
-        .custom-input, .custom-select {
+        body {
             background-color: #1a1a1a;
             color: #ffffff;
-            border: 1px solid #383838;
+        }
+        .container {
+            padding: 20px;
+        }
+        .custom-input, .custom-select {
+            background-color: #2d2d2d;
+            border: 1px solid #4d4d4d;
+            color: #ffffff;
         }
         .custom-input:focus, .custom-select:focus {
-            border-color: #3b82f6;
-            outline: none;
+            background-color: #3d3d3d;
+            border-color: #007bff;
+            color: #ffffff;
+            box-shadow: none;
+        }
+        .modal-content {
+            background-color: #2d2d2d;
+            color: #ffffff;
+        }
+        .modal-header {
+            border-bottom: 1px solid #4d4d4d;
+        }
+        .modal-footer {
+            border-top: 1px solid #4d4d4d;
+        }
+        .close {
+            color: #ffffff;
+        }
+        .close:hover {
+            color: #cccccc;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            border-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            border-color: #545b62;
+        }
+        .form-text {
+            color: #aaaaaa !important;
+        }
+        select {
+            background-color: #2d2d2d !important;
+            color: #ffffff !important;
+        }
+        select option {
+            background-color: #2d2d2d;
+            color: #ffffff;
+        }
+        .bg-gray-800 {
+            background-color: #2d2d2d !important;
+        }
+        .text-gray-300 {
+            color: #ffffff !important;
         }
     </style>
 </head>
@@ -23,72 +77,113 @@
 
         <!-- اختيار الجدول -->
         <div class="mb-8">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center">
                 <div class="flex-1">
                     <label class="block text-sm font-medium text-gray-300 mb-2">اختر الجدول</label>
-                    <select id="sheetSelect" class="custom-select w-full p-2 rounded-md">
-                        {% for sheet_name in config %}
-                        <option value="{{ sheet_name }}">{{ sheet_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="mr-4 flex items-end">
-                    <button onclick="deleteSheet()" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors duration-200">
-                        حذف الجدول
-                    </button>
+                    <div class="flex gap-4">
+                        <select id="sheetSelect" class="custom-select flex-1 p-2 rounded-md" onchange="loadSheetConfig()">
+                            <option value="">-- اختر جدولاً --</option>
+                            {% for sheet_name in config %}
+                            <option value="{{ sheet_name }}">{{ sheet_name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700" data-toggle="modal" data-target="#addSheetModal">
+                            إضافة جدول جديد
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- معلومات الجدول -->
-        <div class="bg-gray-800 rounded-lg p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">إعدادات الجدول</h2>
+        <div id="configSection" style="display: none;">
+            <div class="bg-gray-800 rounded-lg p-6 mb-8">
+                <h2 class="text-xl font-semibold mb-4">إعدادات الجدول</h2>
 
-            <!-- اسم ورقة العمل -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-300 mb-2">اسم ورقة العمل</label>
-                <input type="text" id="worksheetName" class="custom-input w-full p-2 rounded-md">
-            </div>
+                <!-- اسم ورقة العمل -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">اسم ورقة العمل</label>
+                    <input type="text" id="worksheetName" class="custom-input w-full p-2 rounded-md">
+                </div>
 
-            <!-- معرف المستخدم -->
-            <div class="mb-4">
-                <div class="flex justify-between items-center mb-2">
-                    <label class="block text-sm font-medium text-gray-300">المستخدمون المصرح لهم</label>
-                    <div class="flex items-center">
-                        <label class="inline-flex items-center ml-4">
-                            <input type="checkbox" id="allowAllUsers" class="form-checkbox h-4 w-4 text-blue-600" onchange="toggleUserAccess(this)">
-                            <span class="mr-2 text-sm text-gray-300">متاح للجميع</span>
-                        </label>
-                        <button onclick="addUserId()" class="inline-flex items-center px-3 py-1 border border-transparent text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
-                            <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            إضافة معرف
-                        </button>
+                <!-- معرف المستخدم -->
+                <div class="mb-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-medium text-gray-300">المستخدمون المصرح لهم</label>
+                        <div class="flex items-center">
+                            <label class="inline-flex items-center ml-4">
+                                <input type="checkbox" id="allowAllUsers" class="form-checkbox h-4 w-4 text-blue-600" onchange="toggleUserAccess(this)">
+                                <span class="mr-2 text-sm text-gray-300">متاح للجميع</span>
+                            </label>
+                            <button onclick="addUserId()" class="inline-flex items-center px-3 py-1 border border-transparent text-sm rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200">
+                                <svg class="ml-1 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                                إضافة معرف
+                            </button>
+                        </div>
+                    </div>
+                    <div id="userIdsContainer" class="space-y-2">
+                        <!-- سيتم إضافة حقول المعرفات هنا -->
                     </div>
                 </div>
-                <div id="userIdsContainer" class="space-y-2">
-                    <!-- سيتم إضافة حقول المعرفات هنا -->
-                </div>
-            </div>
 
-            <!-- الأعمدة -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-300 mb-2">الأعمدة</label>
-                <div id="columnsContainer" class="space-y-4">
-                    <!-- سيتم إضافة الأعمدة هنا -->
+                <!-- الأعمدة -->
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">الأعمدة</label>
+                    <div id="columnsContainer" class="space-y-4">
+                        <!-- سيتم إضافة الأعمدة هنا -->
+                    </div>
+                    <button onclick="addColumn()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                        إضافة عمود
+                    </button>
                 </div>
-                <button onclick="addColumn()" class="mt-2 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                    إضافة عمود
+
+                <!-- زر الحفظ -->
+                <button onclick="saveChanges()" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                    حفظ التغييرات
                 </button>
             </div>
-
-            <!-- زر الحفظ -->
-            <button onclick="saveChanges()" class="w-full bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
-                حفظ التغييرات
-            </button>
         </div>
     </div>
+
+    <!-- نافذة إضافة جدول جديد -->
+    <div class="modal fade" id="addSheetModal" tabindex="-1" role="dialog" aria-labelledby="addSheetModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addSheetModalLabel">إضافة جدول جديد</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="sheetName">اسم الجدول</label>
+                        <input type="text" class="form-control custom-input" id="sheetName" placeholder="أدخل اسم الجدول">
+                    </div>
+                    <div class="form-group">
+                        <label for="spreadsheetId">معرف الجدول</label>
+                        <input type="text" class="form-control custom-input" id="spreadsheetId" placeholder="أدخل معرف الجدول من Google Sheets">
+                        <small class="form-text text-muted">
+                            يمكنك الحصول على معرف الجدول من رابط Google Sheets:
+                            <br>
+                            https://docs.google.com/spreadsheets/d/<strong>معرف_الجدول</strong>/edit
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-primary" onclick="addNewSheet()">إضافة</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- jQuery and Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 
     <script>
         let config = {{ config|tojson|safe }};
@@ -125,6 +220,10 @@
                     const isRequired = sheetConfig.required_columns?.includes(columnName);
                     columnsContainer.appendChild(createColumnInput(columnName, type, dateOptions, isRequired));
                 });
+
+                document.getElementById('configSection').style.display = 'block';
+            } else {
+                document.getElementById('configSection').style.display = 'none';
             }
         }
 
@@ -411,6 +510,71 @@
             } catch (error) {
                 alert('حدث خطأ أثناء الاتصال بالخادم');
                 console.error('Error:', error);
+            }
+        }
+
+        // إضافة جدول جديد
+        async function addNewSheet() {
+            const sheetName = document.getElementById('sheetName').value;
+            const spreadsheetId = document.getElementById('spreadsheetId').value;
+            
+            if (!sheetName || !spreadsheetId) {
+                alert('يرجى إدخال اسم الجدول ومعرفه');
+                return;
+            }
+
+            try {
+                console.log('التحقق من الجدول:', {
+                    sheet_name: sheetName,
+                    spreadsheet_id: spreadsheetId
+                });
+
+                // التحقق من وجود الجدول
+                const verifyResponse = await fetch('/verify_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sheet_name: sheetName,
+                        spreadsheet_id: spreadsheetId
+                    })
+                });
+
+                const verifyResult = await verifyResponse.json();
+                console.log('نتيجة التحقق:', verifyResult);
+                
+                if (!verifyResponse.ok) {
+                    alert(verifyResult.message || 'حدث خطأ أثناء التحقق من الجدول');
+                    return;
+                }
+
+                // إضافة الجدول
+                const addResponse = await fetch('/add_sheet', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sheet_name: sheetName,
+                        worksheet_name: verifyResult.sheets[0],
+                        spreadsheet_id: spreadsheetId
+                    })
+                });
+
+                const addResult = await addResponse.json();
+                console.log('نتيجة الإضافة:', addResult);
+                
+                if (addResponse.ok) {
+                    alert('تم إضافة الجدول بنجاح');
+                    $('#addSheetModal').modal('hide');
+                    location.reload();
+                } else {
+                    alert(addResult.message || 'حدث خطأ أثناء إضافة الجدول');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('حدث خطأ غير متوقع');
             }
         }
 
