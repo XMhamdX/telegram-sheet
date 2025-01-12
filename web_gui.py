@@ -121,12 +121,23 @@ def save():
             config[sheet_name].update({
                 'sheet_name': sheet_name,
                 'worksheet_name': data['worksheet_name'],
-                'authorized_user_id': data['authorized_user_ids'][0],
-                'authorized_user_ids': data['authorized_user_ids'][1:],
+                'authorized_user_id': data['authorized_user_ids'][0] if data['authorized_user_ids'] else '',
+                'authorized_user_ids': data['authorized_user_ids'][1:] if len(data['authorized_user_ids']) > 1 else [],
                 'column_types': data['column_types'],
-                'column_order': data['column_order'],
-                'date_options': data['date_options']
+                'column_order': data['column_order']
             })
+            
+            # تحديث خيارات التاريخ
+            if 'date_options' in data:
+                config[sheet_name]['date_options'] = data['date_options']
+            else:
+                config[sheet_name]['date_options'] = {}
+            
+            # الحفاظ على الأعمدة المطلوبة والاختيارية إذا كانت موجودة
+            if 'required_columns' in config[sheet_name]:
+                config[sheet_name]['required_columns'] = data.get('required_columns', config[sheet_name]['required_columns'])
+            if 'optional_columns' in config[sheet_name]:
+                config[sheet_name]['optional_columns'] = data.get('optional_columns', config[sheet_name]['optional_columns'])
             
             if save_config(config):
                 return jsonify({"status": "success", "message": "تم حفظ التغييرات بنجاح"})
