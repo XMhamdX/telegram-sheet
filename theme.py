@@ -2,7 +2,7 @@ from tkinter import ttk
 
 class Theme:
     # الألوان الرئيسية
-    PRIMARY = "#1E88E5"  # أزرق
+    PRIMARY = "#2196F3"  # أزرق
     SECONDARY = "#FFC107"  # أصفر
     SUCCESS = "#4CAF50"  # أخضر
     ERROR = "#F44336"  # أحمر
@@ -10,12 +10,12 @@ class Theme:
     INFO = "#2196F3"  # أزرق
     
     # ألوان الخلفية
-    BG_PRIMARY = "#121212"  # أسود
-    BG_SECONDARY = "#1E1E1E"  # رمادي داكن
+    BG_PRIMARY = "#FFFFFF"  # أبيض
+    BG_SECONDARY = "#F5F5F5"  # رمادي فاتح
     
     # ألوان النص
-    TEXT_PRIMARY = "#FFFFFF"  # أبيض
-    TEXT_SECONDARY = "#B3B3B3"  # رمادي فاتح
+    TEXT_PRIMARY = "#212121"  # أسود
+    TEXT_SECONDARY = "#757575"  # رمادي
     TEXT_LIGHT = "#FFFFFF"  # أبيض
     
     # الخط
@@ -26,7 +26,7 @@ class Theme:
     FONT_SIZE_XLARGE = 16
     
     # الحواف
-    BORDER_COLOR = "#383838"
+    BORDER_COLOR = "#E0E0E0"
     BORDER_WIDTH = 1
     
     # التباعد
@@ -35,27 +35,27 @@ class Theme:
     PADDING_LARGE = 15
     
     # أنماط الأزرار
-    BUTTON_BG = "#1E1E1E"
+    BUTTON_BG = PRIMARY
     BUTTON_FG = TEXT_LIGHT
-    BUTTON_ACTIVE_BG = "#2C2C2C"  # رمادي داكن
-    BUTTON_HOVER_BG = "#383838"  # رمادي متوسط
+    BUTTON_ACTIVE_BG = "#1976D2"  # أزرق داكن
+    BUTTON_HOVER_BG = "#42A5F5"  # أزرق فاتح
     
     # أنماط الإدخال
-    ENTRY_BG = "#2C2C2C"
+    ENTRY_BG = BG_PRIMARY
     ENTRY_FG = TEXT_PRIMARY
-    ENTRY_BORDER = "#383838"
+    ENTRY_BORDER = BORDER_COLOR
     
     # أنماط الجداول
-    TABLE_BG = "#1E1E1E"
+    TABLE_BG = BG_PRIMARY
     TABLE_FG = TEXT_PRIMARY
-    TABLE_SELECTED_BG = "#383838"
-    TABLE_HEADER_BG = "#2C2C2C"
+    TABLE_SELECTED_BG = "#E3F2FD"  # أزرق فاتح جداً
+    TABLE_HEADER_BG = BG_SECONDARY
     TABLE_HEADER_FG = TEXT_PRIMARY
     
     # أنماط القوائم
-    MENU_BG = "#1E1E1E"
+    MENU_BG = BG_PRIMARY
     MENU_FG = TEXT_PRIMARY
-    MENU_ACTIVE_BG = "#383838"
+    MENU_ACTIVE_BG = PRIMARY
     MENU_ACTIVE_FG = TEXT_LIGHT
 
     @staticmethod

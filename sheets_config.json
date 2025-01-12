@@ -17,11 +17,20 @@
         "date_options": {
             "التاريخ": {
                 "auto": true,
-                "include_time": false,
-                "format": "date_only"
+                "include_time": false
             }
         },
-        "authorized_user_id": "773012141",
-        "authorized_user_ids": []
+        "authorized_user_ids": [
+            "773012141",
+            "6758582992"
+        ],
+        "required_columns": [
+            "تسمية",
+            "المربح"
+        ],
+        "optional_columns": [
+            "التاريخ",
+            "ملاحظات"
+        ]
     }
 }
