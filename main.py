@@ -89,53 +89,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['sheets_config'] = sheets_config
         context.user_data['accessible_sheets'] = accessible_sheets
         
-        # التحقق من وجود جدول مستخدم سابقاً
-        last_used_sheet = context.user_data.get('last_used_sheet')
-        if last_used_sheet and last_used_sheet in accessible_sheets:
-            # إنشاء تحديث وهمي لمحاكاة اختيار الجدول
-            logger.info(f"الدخول مباشرة إلى آخر جدول مستخدم: {last_used_sheet}")
-            keyboard = [
-                [InlineKeyboardButton("📋 عرض كافة الجداول", callback_data="show_all_sheets")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            message = await update.message.reply_text(
-                f"✨ جاري فتح الجدول الأخير: {last_used_sheet}\n"
-                "يمكنك الضغط على الزر أدناه لعرض كافة الجداول المتاحة",
-                reply_markup=reply_markup
-            )
-            
-            # إنشاء كائن CallbackQuery وهمي
-            dummy_data = f"sheet_{last_used_sheet}"
-            dummy_query = CallbackQuery(
-                id="dummy_id",
-                from_user=update.effective_user,
-                chat_instance="dummy_chat",
-                data=dummy_data,
-                message=message
-            )
-            
-            # معالجة اختيار الجدول مباشرة
-            return await handle_sheet_choice(dummy_query, context)
-        else:
-            # إنشاء أزرار للجداول المتاحة
-            keyboard = [[InlineKeyboardButton(sheet_name, callback_data=f"sheet_{sheet_name}")] 
-                        for sheet_name in accessible_sheets.keys()]
-            message_text = (
-                "🔍 الجداول المتاحة لك:\n"
-                "اختر الجدول الذي تريد إدخال البيانات فيه:"
-            )
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            logger.info(f"إرسال قائمة الجداول للمستخدم {user_id}")
-            await update.message.reply_text(message_text, reply_markup=reply_markup)
-            
-            return CHOOSING_SHEET
+        # إنشاء أزرار للجداول المتاحة
+        keyboard = []
+        for sheet_name in accessible_sheets:
+            keyboard.append([InlineKeyboardButton(sheet_name, callback_data=f"sheet_{sheet_name}")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "👋 مرحباً! الرجاء اختيار الجدول:",
+            reply_markup=reply_markup
+        )
+        return CHOOSING_SHEET
         
     except Exception as e:
-        logger.error(f"خطأ في دالة start: {str(e)}", exc_info=True)
+        logger.error(f"خطأ في start: {str(e)}", exc_info=True)
         await update.message.reply_text(
             "❌ عذراً، حدث خطأ غير متوقع.\n"
-            "سيتم إصلاح المشكلة قريباً."
+            "الرجاء المحاولة مرة أخرى لاحقاً."
         )
         return ConversationHandler.END
 
@@ -185,7 +155,7 @@ async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.info(f"اسم الجدول المختار: {sheet_name}")
         
         if 'accessible_sheets' not in context.user_data:
-            error_msg = "❌ لم يتم العثور على معلومات الجداول. الرجاء استخدام /start مرة أخرى."
+            error_msg = "❌ لم يتم العثور على معلومات الجداول. الرجاء استخدام /start للبدء من جديد."
             logger.error(f"لم يتم العثور على accessible_sheets في user_data")
             await query.edit_message_text(error_msg)
             return ConversationHandler.END
@@ -235,23 +205,31 @@ async def handle_sheet_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 await update.message.reply_text(error_msg)
         except Exception as e2:
-            logger.error(f"خطأ في إرسال رسالة الخطأ: {str(e2)}")
+            logger.error(f"خطأ في إرسال رسالة الخطأ: {e2}")
         return ConversationHandler.END
 
-async def request_next_column(update_or_query, context):
+async def request_next_column(update_or_query, context: ContextTypes.DEFAULT_TYPE):
     """طلب إدخال العمود التالي"""
     try:
-        if not context.user_data.get('remaining_columns'):
-            # تم إدخال جميع الأعمدة، حفظ البيانات
-            logger.info("تم إدخال جميع الأعمدة، جاري حفظ البيانات")
-            return await save_data(update_or_query, context)
+        logger.info("بدء طلب العمود التالي...")
+        logger.info(f"حالة المحادثة: {context.user_data}")
         
+        if 'remaining_columns' not in context.user_data or not context.user_data['remaining_columns']:
+            logger.error("لم يتم العثور على remaining_columns")
+            error_msg = "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            if hasattr(update_or_query, 'message'):
+                await update_or_query.message.reply_text(error_msg)
+            else:
+                await update_or_query.edit_message_text(error_msg)
+            return ConversationHandler.END
+
         current_column = context.user_data['remaining_columns'][0]
-        sheet_config = context.user_data.get('current_sheet')
+        logger.info(f"العمود الحالي: {current_column}")
         
+        sheet_config = context.user_data.get('current_sheet')
         if not sheet_config:
-            error_msg = "❌ عذراً، لم يتم العثور على معلومات الجدول.\nالرجاء استخدام /start للبدء من جديد."
-            logger.error("لم يتم العثور على معلومات الجدول في request_next_column")
+            logger.error("لم يتم العثور على current_sheet")
+            error_msg = "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
             if hasattr(update_or_query, 'message'):
                 await update_or_query.message.reply_text(error_msg)
             else:
@@ -259,122 +237,183 @@ async def request_next_column(update_or_query, context):
             return ConversationHandler.END
         
         # التحقق مما إذا كان العمود اختياري
-        is_optional = current_column in sheet_config.get('optional_columns', [])
-        skip_text = "\nأرسل /skip للتخطي" if is_optional else ""
+        optional_columns = sheet_config.get('optional_columns', [])
+        is_optional = current_column in optional_columns
         
-        message_text = f"الرجاء إدخال قيمة {current_column}{skip_text}"
-        logger.info(f"طلب إدخال قيمة للعمود: {current_column} (اختياري: {is_optional})")
+        # إنشاء زر التخطي إذا كان العمود اختياري
+        keyboard = []
+        if is_optional:
+            keyboard = [[InlineKeyboardButton("⏭️ تخطي", callback_data="skip")]]
+            
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
         
-        # التحقق من نوع التحديث (رسالة جديدة أو تعديل رسالة موجودة)
-        try:
-            if hasattr(update_or_query, 'message'):
-                await update_or_query.message.reply_text(message_text)
-            else:
-                await update_or_query.edit_message_text(message_text)
-        except Exception as e:
-            logger.error(f"خطأ في إرسال رسالة طلب العمود التالي: {str(e)}")
-            # محاولة إرسال رسالة جديدة في حالة فشل تعديل الرسالة
-            if hasattr(update_or_query, 'message'):
-                await update_or_query.message.reply_text(message_text)
-            else:
-                await update_or_query.message.reply_text(message_text)
-        
+        # إرسال رسالة طلب إدخال القيمة
+        message = f"الرجاء إدخال قيمة {current_column}"
+        if is_optional:
+            message += "\nأرسل /skip للتخطي"
+            
+        if hasattr(update_or_query, 'message'):
+            await update_or_query.message.reply_text(message, reply_markup=reply_markup)
+        else:
+            await update_or_query.edit_message_text(message, reply_markup=reply_markup)
+            
+        context.user_data['CURRENT_STATE'] = ENTERING_DATA
+        logger.info(f"تم تعيين الحالة إلى ENTERING_DATA")
         return ENTERING_DATA
         
     except Exception as e:
-        logger.error(f"خطأ في طلب العمود التالي: {str(e)}", exc_info=True)
-        error_msg = "❌ عذراً، حدث خطأ أثناء طلب العمود التالي.\nالرجاء استخدام /start للبدء من جديد."
+        logger.error(f"خطأ في request_next_column: {str(e)}", exc_info=True)
+        error_msg = "❌ حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى باستخدام /start"
         if hasattr(update_or_query, 'message'):
             await update_or_query.message.reply_text(error_msg)
         else:
-            try:
-                await update_or_query.edit_message_text(error_msg)
-            except:
-                await update_or_query.message.reply_text(error_msg)
+            await update_or_query.edit_message_text(error_msg)
         return ConversationHandler.END
 
-async def handle_column_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """معالجة إدخال قيمة العمود"""
+async def handle_data_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة البيانات المدخلة من المستخدم"""
     try:
-        # التحقق من وجود البيانات المطلوبة في السياق
-        if not all(key in context.user_data for key in ['remaining_columns', 'current_sheet']):
-            logger.error("بيانات السياق مفقودة في handle_column_input")
+        if not context.user_data.get('remaining_columns'):
+            logger.error("لم يتم العثور على remaining_columns")
             await update.message.reply_text(
-                "❌ عذراً، حدث خطأ في معالجة البيانات.\n"
-                "الرجاء استخدام /start للبدء من جديد."
-            )
-            return ConversationHandler.END
-
-        if not context.user_data['remaining_columns']:
-            logger.error("قائمة الأعمدة المتبقية فارغة في handle_column_input")
-            await update.message.reply_text(
-                "❌ عذراً، لا توجد أعمدة متبقية لإدخال البيانات.\n"
-                "الرجاء استخدام /start للبدء من جديد."
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
             )
             return ConversationHandler.END
 
         current_column = context.user_data['remaining_columns'][0]
-        sheet_config = context.user_data['current_sheet']
+        sheet_config = context.user_data.get('current_sheet')
         
+        if not sheet_config:
+            logger.error("لم يتم العثور على current_sheet")
+            await update.message.reply_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+            return ConversationHandler.END
+
+        # التعامل مع أمر التخطي
+        if update.message.text == '/skip':
+            if current_column not in sheet_config.get('optional_columns', []):
+                await update.message.reply_text("❌ لا يمكن تخطي هذا الحقل لأنه إلزامي")
+                return ENTERING_DATA
+            context.user_data['remaining_columns'].pop(0)
+            if not context.user_data['remaining_columns']:
+                return await save_data_to_sheet(update, context)
+            return await request_next_column(update, context)
+
         # حفظ القيمة المدخلة
         input_value = update.message.text.strip()
-        logger.info(f"تم استلام قيمة للعمود {current_column}: {input_value}")
-        
-        # التحقق من القيمة المدخلة
-        if not input_value:
-            logger.warning(f"تم إدخال قيمة فارغة للعمود {current_column}")
-            await update.message.reply_text(
-                f"⚠️ لا يمكن أن تكون قيمة {current_column} فارغة.\n"
-                "الرجاء إدخال قيمة صحيحة."
-            )
-            return ENTERING_DATA
+        column_type = sheet_config.get('column_types', {}).get(current_column)
 
-        # تهيئة قاموس البيانات إذا لم يكن موجوداً
-        if 'current_data' not in context.user_data:
-            context.user_data['current_data'] = {}
-        
+        # التحقق من نوع البيانات
+        if column_type == 'number':
+            try:
+                float(input_value)
+            except ValueError:
+                await update.message.reply_text("❌ الرجاء إدخال رقم صحيح")
+                return ENTERING_DATA
+
         # حفظ القيمة وإزالة العمود من القائمة
+        context.user_data.setdefault('current_data', {})
         context.user_data['current_data'][current_column] = input_value
         context.user_data['remaining_columns'].pop(0)
-        logger.info(f"تم حفظ القيمة بنجاح للعمود {current_column}")
-        
+
+        # إذا لم تبق أعمدة، نحفظ البيانات
+        if not context.user_data['remaining_columns']:
+            return await save_data_to_sheet(update, context)
+
         # طلب العمود التالي
         return await request_next_column(update, context)
-        
-    except Exception as e:
-        logger.error(f"خطأ في معالجة إدخال العمود: {str(e)}", exc_info=True)
-        await update.message.reply_text(
-            "❌ عذراً، حدث خطأ أثناء معالجة القيمة المدخلة.\n"
-            "الرجاء المحاولة مرة أخرى."
-        )
-        return ENTERING_DATA
 
-async def skip_column(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تخطي عمود اختياري"""
+    except Exception as e:
+        logger.error(f"خطأ في handle_data_input: {str(e)}", exc_info=True)
+        await update.message.reply_text(
+            "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+        )
+        return ConversationHandler.END
+
+async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة أمر التخطي"""
     try:
+        if not context.user_data.get('remaining_columns'):
+            await update.message.reply_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+            return ConversationHandler.END
+
         current_column = context.user_data['remaining_columns'][0]
-        sheet_config = context.user_data['current_sheet']
+        sheet_config = context.user_data.get('current_sheet')
         
+        if not sheet_config:
+            await update.message.reply_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+            return ConversationHandler.END
+
         if current_column not in sheet_config.get('optional_columns', []):
-            await update.message.reply_text("لا يمكن تخطي هذا العمود لأنه إلزامي.")
+            await update.message.reply_text("❌ لا يمكن تخطي هذا الحقل لأنه إلزامي")
             return ENTERING_DATA
-        
+
         # تخطي العمود الحالي
-        context.user_data['current_data'][current_column] = ''
         context.user_data['remaining_columns'].pop(0)
-        
+
+        # إذا لم تبق أعمدة، نحفظ البيانات
+        if not context.user_data['remaining_columns']:
+            return await save_data_to_sheet(update, context)
+
         # طلب العمود التالي
         return await request_next_column(update, context)
-        
-    except Exception as e:
-        logger.error(f"خطأ في تخطي العمود: {str(e)}", exc_info=True)
-        await update.message.reply_text(
-            "❌ عذراً، حدث خطأ أثناء محاولة تخطي العمود.\n"
-            "الرجاء المحاولة مرة أخرى."
-        )
-        return ENTERING_DATA
 
-async def save_data(update_or_query, context):
+    except Exception as e:
+        logger.error(f"خطأ في handle_skip: {str(e)}", exc_info=True)
+        await update.message.reply_text(
+            "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+        )
+        return ConversationHandler.END
+
+async def handle_skip_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """معالجة الضغط على زر التخطي"""
+    try:
+        query = update.callback_query
+        await query.answer()
+
+        if not context.user_data.get('remaining_columns'):
+            await query.edit_message_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+            return ConversationHandler.END
+
+        current_column = context.user_data['remaining_columns'][0]
+        sheet_config = context.user_data.get('current_sheet')
+        
+        if not sheet_config:
+            await query.edit_message_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+            return ConversationHandler.END
+
+        if current_column not in sheet_config.get('optional_columns', []):
+            await query.edit_message_text("❌ لا يمكن تخطي هذا الحقل لأنه إلزامي")
+            return ENTERING_DATA
+
+        # تخطي العمود الحالي
+        context.user_data['remaining_columns'].pop(0)
+
+        # إذا لم تبق أعمدة، نحفظ البيانات
+        if not context.user_data['remaining_columns']:
+            return await save_data_to_sheet(query, context)
+
+        # طلب العمود التالي
+        return await request_next_column(query, context)
+
+    except Exception as e:
+        logger.error(f"خطأ في handle_skip_button: {str(e)}", exc_info=True)
+        if query:
+            await query.edit_message_text(
+                "❌ حدث خطأ في إدخال البيانات. الرجاء المحاولة مرة أخرى باستخدام /start"
+            )
+        return ConversationHandler.END
+
+async def save_data_to_sheet(update_or_query, context):
     """حفظ البيانات في Google Sheets"""
     try:
         sheet_config = context.user_data['current_sheet']
@@ -549,8 +588,9 @@ async def main():
                     CallbackQueryHandler(show_all_sheets, pattern='^show_all_sheets$')
                 ],
                 ENTERING_DATA: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_column_input),
-                    CommandHandler('skip', skip_column),
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_data_input),
+                    CommandHandler('skip', handle_skip),
+                    CallbackQueryHandler(handle_skip_button, pattern='^skip$'),
                     CommandHandler('cancel', cancel)
                 ]
             },

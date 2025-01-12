@@ -32,5 +32,25 @@
             "التاريخ",
             "ملاحظات"
         ]
+    },
+    "المشتريات": {
+        "sheet_name": "المشتريات",
+        "worksheet_name": "الورقة1",
+        "spreadsheet_id": "1VVo0bnsKkURWYqXR5Id0aOaNNiKWHraaQg1oAPaBqg0",
+        "authorized_user_id": "",
+        "authorized_user_ids": [],
+        "column_types": {
+            "التاريخ": "text",
+            "المنتج": "text",
+            "السعر": "text",
+            "ملاحظات": "text"
+        },
+        "column_order": [
+            "التاريخ",
+            "المنتج",
+            "السعر",
+            "ملاحظات"
+        ],
+        "date_options": {}
     }
 }
