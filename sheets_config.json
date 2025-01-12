@@ -37,12 +37,12 @@
         "sheet_name": "المشتريات",
         "worksheet_name": "الورقة1",
         "spreadsheet_id": "1VVo0bnsKkURWYqXR5Id0aOaNNiKWHraaQg1oAPaBqg0",
-        "authorized_user_id": "",
+        "authorized_user_id": "773012141",
         "authorized_user_ids": [],
         "column_types": {
-            "التاريخ": "text",
+            "التاريخ": "date",
             "المنتج": "text",
-            "السعر": "text",
+            "السعر": "number",
             "ملاحظات": "text"
         },
         "column_order": [
@@ -51,6 +51,11 @@
             "السعر",
             "ملاحظات"
         ],
-        "date_options": {}
+        "date_options": {
+            "التاريخ": {
+                "auto": true,
+                "include_time": false
+            }
+        }
     }
 }

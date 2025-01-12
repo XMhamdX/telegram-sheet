@@ -56,6 +56,12 @@ def get_user_accessible_sheets(user_id: str, sheets_config: dict) -> dict:
     """الحصول على الجداول المتاحة للمستخدم"""
     accessible_sheets = {}
     for sheet_name, sheet_data in sheets_config.items():
+        # التحقق من authorized_user_id الرئيسي
+        if str(user_id) == str(sheet_data.get('authorized_user_id', '')):
+            accessible_sheets[sheet_name] = sheet_data
+            continue
+            
+        # التحقق من قائمة authorized_user_ids
         if str(user_id) in map(str, sheet_data.get('authorized_user_ids', [])):
             accessible_sheets[sheet_name] = sheet_data
     return accessible_sheets
