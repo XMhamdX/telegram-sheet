@@ -4,7 +4,7 @@ import os
 import sys
 import asyncio
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 import config
 import gspread
@@ -96,14 +96,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # التحقق من وجود جدول مستخدم سابقاً
         last_used_sheet = context.user_data.get('last_used_sheet')
         if last_used_sheet and last_used_sheet in accessible_sheets:
+            # إنشاء تحديث وهمي لمحاكاة اختيار الجدول
+            logger.info(f"الدخول مباشرة إلى آخر جدول مستخدم: {last_used_sheet}")
             keyboard = [
-                [InlineKeyboardButton(f"✨ {last_used_sheet}", callback_data=f"sheet_{last_used_sheet}")],
                 [InlineKeyboardButton("📋 عرض كافة الجداول", callback_data="show_all_sheets")]
             ]
-            message_text = (
-                "🔍 آخر جدول تم استخدامه:\n"
-                "يمكنك اختيار نفس الجدول أو عرض كافة الجداول المتاحة"
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            message = await update.message.reply_text(
+                f"✨ جاري فتح الجدول الأخير: {last_used_sheet}\n"
+                "يمكنك الضغط على الزر أدناه لعرض كافة الجداول المتاحة",
+                reply_markup=reply_markup
             )
+            
+            # إنشاء كائن CallbackQuery وهمي
+            dummy_data = f"sheet_{last_used_sheet}"
+            dummy_query = CallbackQuery(
+                id="dummy_id",
+                from_user=update.effective_user,
+                chat_instance="dummy_chat",
+                data=dummy_data,
+                message=message
+            )
+            
+            # معالجة اختيار الجدول مباشرة
+            return await handle_sheet_choice(dummy_query, context)
         else:
             # إنشاء أزرار للجداول المتاحة
             keyboard = [[InlineKeyboardButton(sheet_name, callback_data=f"sheet_{sheet_name}")] 
@@ -112,12 +128,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🔍 الجداول المتاحة لك:\n"
                 "اختر الجدول الذي تريد إدخال البيانات فيه:"
             )
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        logger.info(f"إرسال قائمة الجداول للمستخدم {user_id}")
-        await update.message.reply_text(message_text, reply_markup=reply_markup)
-        
-        return CHOOSING_SHEET
+            
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            logger.info(f"إرسال قائمة الجداول للمستخدم {user_id}")
+            await update.message.reply_text(message_text, reply_markup=reply_markup)
+            
+            return CHOOSING_SHEET
         
     except Exception as e:
         logger.error(f"خطأ في دالة start: {str(e)}", exc_info=True)
